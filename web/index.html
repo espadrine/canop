@@ -1,0 +1,97 @@
+<!doctype html><meta charset=utf-8>
+<title> Convergent Collaborative Editing </title>
+<link rel=stylesheet href=cm-3.16/lib/codemirror.css>
+<body>
+<script src=cm-3.16/lib/codemirror.js></script>
+<script src=canop.js>/* Collaborative library */</script>
+<script>
+
+var Operation = canop.Operation;
+var AtomicOperation = canop.AtomicOperation;
+
+var editor = CodeMirror(document.body);
+var rootOperation = new Operation();
+var operation = new Operation();
+
+function editorChange(editor, change) {
+  var from = change.from;
+  var to = change.to;
+  var text = change.text.join('\n');
+  var removed = change.removed.join('\n');
+  if (removed.length > 0) {
+    operation = operation.delete(editor.indexFromPos(from), removed);
+  }
+  if (text.length > 0) {
+    operation = operation.insert(editor.indexFromPos(from), text);
+  }
+  if (change.next) { editorChange(editor, change.next);
+  } else {
+    rootOperation.apply(operation);
+    send();
+  }
+}
+
+// Connection.
+
+var socket = new WebSocket(
+    // Trick: use the end of either http: or https:.
+    'ws' + window.location.protocol.slice(4) + '//' +
+      window.location.hostname +
+      (window.location.port.length > 0? (':' + window.location.port): '') +
+      '/$websocket:text');
+
+function send() {
+  if (operation.list.length > 0) {
+    socket.send(JSON.stringify({ D: operation.list }));
+    operation = new Operation();
+  }
+}
+
+socket.onmessage = function recv(event) {
+  var update = JSON.parse(event.data);
+  if (update.M !== undefined) {
+    editor.off('change', editorChange);
+    editor.setValue(update.M);
+    rootOperation.insert(0, update.M);
+    editor.on('change', editorChange);
+  } else if (update.D !== undefined) {
+    var change = Operation.fromList(update.D);
+    rootOperation.apply(change);
+    updateEditor(editor, change);
+  }
+};
+
+function updateEditor(editor, delta) {
+  editor.off('change', editorChange);
+  var cursor = editor.getCursor();
+  editor.setValue(''+rootOperation);
+  editor.setCursor(cursor);
+  // Smarter method:
+  //var inverse = inverseOperation(operation);
+  //applyDelta(inverse);
+  //applyDelta(operation.apply(delta));
+  editor.on('change', editorChange);
+}
+
+function inverseOperation(operation) {
+  var inverse = operation.dup();
+  // Insertions become deletions and vice-versa.
+  for (var i = 0; i < inverse.list.length; i++) {
+    inverse.list[i].tag = inverse.list[i].tag === tags.insert? tags.delete:
+        tags.insert;
+  }
+  return inverse;
+};
+
+function applyDelta(editor, change) {
+  for (var i = 0; i < change.list.length; i++) {
+    if (change.list[i].tag === tags.insert) {
+      //TODO
+    } else if (change.list[i].tag === tags.insert) {
+      //TODO
+    }
+  }
+}
+
+</script>
+</body>
