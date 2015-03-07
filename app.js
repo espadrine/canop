@@ -1,24 +1,21 @@
-// Copyright © 2013 Thaddee Tyl. All rights reserved.
-// Code covered by the LGPL license.
+// Copyright © 2013-2015 Thaddee Tyl. LGPL.
 
 var camp = require('camp').start({ port: +process.argv[2] || 1234 });
 var canop = require('./canop');
 
-var shared = new canop.Operation();
+var shared = new canop.Client();
 
 // coso: Collaborative socket.
 var coso = camp.ws('text', function (socket) {
-  socket.on('message', function (data) {
-    var change;
-    try {
-      change = canop.Operation.fromList(JSON.parse(data).D);  // delta.
-    } catch(e) { console.error(e); return; }
-    coso.clients.forEach(function (client) {
-      if (client !== socket) { client.send(data); }
-    });
+  socket.on('message', function (raw) {
+    var data = JSON.parse(raw);
+    var change = canop.Operation.fromList(data.D);  // delta.
     //console.log('change:', JSON.stringify(change));
-    shared.apply(change);
+    var canon = shared.receiveSent(change);
     //console.log('shared:', JSON.stringify(shared));
+    coso.clients.forEach(function (client) {
+      client.send(JSON.stringify({D:canon.list}));
+    });
   });
-  socket.send(JSON.stringify({ M: '' + shared }));
+  socket.send(JSON.stringify({ M: '' + shared, B: shared.base }));
 });

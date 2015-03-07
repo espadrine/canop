@@ -6,12 +6,12 @@
 <script src=canop.js>/* Collaborative library */</script>
 <script>
 
+var Client = canop.Client;
 var Operation = canop.Operation;
-var AtomicOperation = canop.AtomicOperation;
 
 var editor = CodeMirror(document.body);
-var rootOperation = new Operation();
-var operation = new Operation();
+var shared = new Client();
+var operation = new Operation();//
 
 function editorChange(editor, change) {
   var from = change.from;
@@ -19,14 +19,13 @@ function editorChange(editor, change) {
   var text = change.text.join('\n');
   var removed = change.removed.join('\n');
   if (removed.length > 0) {
-    operation = operation.delete(editor.indexFromPos(from), removed);
+    shared.delete(editor.indexFromPos(from), removed);
   }
   if (text.length > 0) {
-    operation = operation.insert(editor.indexFromPos(from), text);
+    shared.insert(editor.indexFromPos(from), text);
   }
   if (change.next) { editorChange(editor, change.next);
   } else {
-    rootOperation.apply(operation);
     send();
   }
 }
@@ -41,22 +40,24 @@ var socket = new WebSocket(
       '/$websocket:text');
 
 function send() {
-  if (operation.list.length > 0) {
-    socket.send(JSON.stringify({ D: operation.list }));
-    operation = new Operation();
+  if (shared.local.list.length > 0) {
+    shared.prepareSent();
+    console.log('> ' + JSON.stringify({ D: shared.sent.list }));
+    socket.send(JSON.stringify({ D: shared.sent.list }));
   }
 }
 
 socket.onmessage = function recv(event) {
   var update = JSON.parse(event.data);
+  console.log('< ' + JSON.stringify(update));
   if (update.M !== undefined) {
     editor.off('change', editorChange);
     editor.setValue(update.M);
-    rootOperation.insert(0, update.M);
+    shared.reset(update.M, update.B);
     editor.on('change', editorChange);
   } else if (update.D !== undefined) {
     var change = Operation.fromList(update.D);
-    rootOperation.apply(change);
+    shared.receiveCanon(change);
     updateEditor(editor, change);
   }
 };
@@ -64,12 +65,11 @@ socket.onmessage = function recv(event) {
 function updateEditor(editor, delta) {
   editor.off('change', editorChange);
   var cursor = editor.getCursor();
-  editor.setValue(''+rootOperation);
+  editor.setValue(''+shared);
   editor.setCursor(cursor);
   // Smarter method:
-  //var inverse = inverseOperation(operation);
-  //applyDelta(inverse);
-  //applyDelta(operation.apply(delta));
+  //var editorDelta = editorChanges(delta);
+  //applyDelta(editorDelta);
   editor.on('change', editorChange);
 }
 
@@ -83,7 +83,7 @@ function inverseOperation(operation) {
   return inverse;
 };
 
-function applyDelta(editor, change) {
+function applyDelta(delta) {
   for (var i = 0; i < change.list.length; i++) {
     if (change.list[i].tag === tags.insert) {
       //TODO

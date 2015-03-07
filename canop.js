@@ -16,21 +16,37 @@ var tag = {
 };
 
 var nounce = 0;
-function AtomicOperation(offset, tag, string) {
+// Collision probability: below 0.5 for n < 54563.
+// function(n, max) { return 1 - fact(max) / (Math.pow(max, n) * fact(max - n)); }
+// Tailor expansion
+// function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
+var localId = (Math.random() * 2147483648)|0;
+function AtomicOperation(offset, tag, string, base) {
   // Unique identifier for this operation. List of numbers.
-  this.mark = [Date.now(), nounce++, Math.random()];
+  this.mark = [+base, localId, nounce++];
   this.offset = offset;
   this.tag = tag;
   this.string = string;
 }
+exports.AtomicOperation = AtomicOperation;
 AtomicOperation.prototype = {
   dup: function duplicateAtomicOperation() {
     return AtomicOperation.fromObject(this);
-  }
+  },
+  // Get this operation modified by another atomic operation.
+  getModifiedBy: function getModifiedBy(op) {
+    if (op.offset < this.offset) {
+      if (op.tag === tag.insert) {
+        this.offset += op.string.length;
+      } else {
+        this.offset -= op.string.length;
+      }
+    }
+  },
 };
 
 AtomicOperation.fromObject = function (data) {
-  var ao = new AtomicOperation(data.offset, data.tag, data.string);
+  var ao = new AtomicOperation(data.offset, data.tag, data.string, data.mark[0]);
   for (var i = 0; i < data.mark.length; i++) {
     ao.mark[i] = data.mark[i];
   }
@@ -41,6 +57,7 @@ function Operation() {
   // List of AtomicOperation.
   this.list = [];
 }
+exports.Operation = Operation;
 
 Operation.fromList = function (data) {
   var op = new Operation();
@@ -56,18 +73,12 @@ Operation.prototype = {
   apply: function applyOperation(op) {
     var opDup = op.dup();
     this.list = this.list.concat(opDup.list);
-    this.list.sort(function (a, b) {
-      return (a.mark < b.mark)? -1: 1;
-    });
   },
   // Same as apply, without mutating this.
   combine: function combineOperation(op) {
     var thisDup = this.dup();
     var opDup = op.dup();
     thisDup.list = thisDup.list.concat(opDup.list);
-    thisDup.list.sort(function (a, b) {
-      return (a.mark < b.mark)? -1: 1;
-    });
     return thisDup;
   },
   dup: function duplicate() {
@@ -78,15 +89,21 @@ Operation.prototype = {
     }
     return newop;
   },
+  // Get this operation updated as if op happened before.
+  getModifiedBy: function getModifiedBy(op) {
+    for (var i = 0; i < this.list.length; i++) {
+      this.list[i].getModifiedBy(op);
+    }
+  },
   // Insert a string to the operation. Mutates this.
-  insert: function insertOp(offset, string) {
-    var aop = new AtomicOperation(offset, tag.insert, string);
+  insert: function insertOp(offset, string, base) {
+    var aop = new AtomicOperation(offset, tag.insert, string, base);
     this.list.push(aop);
     return this;
   },
   // Delete a string to the operation. Mutates this.
-  delete: function deleteOp(offset, string) {
-    var aop = new AtomicOperation(offset, tag.delete, string);
+  delete: function deleteOp(offset, string, base) {
+    var aop = new AtomicOperation(offset, tag.delete, string, base);
     this.list.push(aop);
     return this;
   },
@@ -136,8 +153,86 @@ function lessThanMark(mark1, mark2) {
   } else { return 0; }
 }
 
-exports.Operation = Operation;
-exports.AtomicOperation = AtomicOperation;
+function Client(base) {
+  this.base = base || 0;  // canonIndex; 0 means no root.
+  this.local = new Operation();
+  this.sent = new Operation();
+  this.canon = new Operation();
+}
+exports.Client = Client;
+Client.prototype = {
+  reset: function(string, base) {
+    this.local = new Operation();
+    this.sent = new Operation();
+    this.canon = new Operation();
+    this.canon.insert(0, string);
+    this.canon.list[0].mark[0] = base;
+    this.base = base;
+  },
+  prepareSent: function() {
+    // Switch all local operations to sent.
+    this.sent.list = this.local.list;
+    this.local.list = [];
+  },
+  // Return a list of atomic operations.
+  operationsSinceBase: function(base) {
+    for (var i = this.canon.list.length - 1; i >= 0; i--) {
+      if (this.canon.list[i].mark[0] === base) {
+        return this.canon.list.slice(i + 1);
+      }
+    }
+    return this.canon.list;
+  },
+  // Modify your local / sent operations accordingly.
+  receiveCanon: function(canon) {
+    this.canon.apply(canon);
+    for (var i = 0; i < canon.list.length; i++) {
+      var op = canon.list[i];
+      // Remove all canon operations from sent.
+      for (var j = 0; j < this.sent.list.length; j++) {
+        var sentOp = this.sent.list[j];
+        if (sentOp.mark[1] === op.mark[1] && sentOp.mark[2] === op.mark[2]) {
+          this.sent.list.splice(j, 1);
+        }
+      }
+      this.sent.getModifiedBy(op);
+      this.local.getModifiedBy(op);
+    }
+    this.base = this.canon.list[this.canon.list.length - 1].mark[0];
+  },
+  // Canonize sent operations.
+  // Returns the canonized operations.
+  receiveSent: function(sent) {
+    var base = sent.list[0].mark[0];
+    var origin = sent.list[0].mark[1];
+    var delta = this.operationsSinceBase(base);
+    for (var i = 0; i < delta.length; i++) {
+      var op = delta[i];
+      // Don't modify operations from the same origin.
+      // TODO: check this works.
+      if (op.mark[1] !== origin) {
+        sent.getModifiedBy(op);
+      }
+    }
+    // Set the canonIndex.
+    for (var i = 0; i < sent.list.length; i++) {
+      sent.list[i].mark[0] = this.base++;
+    }
+    this.canon = this.canon.combine(sent);
+    return sent;
+  },
+  insert: function insertOp(offset, string) {
+    this.local.insert(offset, string, this.base);
+  },
+  delete: function deleteOp(offset, string) {
+    this.local.delete(offset, string, this.base);
+  },
+  toString: function() {
+    var total = this.canon.combine(this.sent).combine(this.local);
+    return total.toString();
+  }
+};
+
 return exports;
 
 }));
