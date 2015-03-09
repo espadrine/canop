@@ -57,38 +57,80 @@ socket.onmessage = function recv(event) {
     editor.on('change', editorChange);
   } else if (update.D !== undefined) {
     var change = Operation.fromList(update.D);
-    shared.receiveCanon(change);
-    updateEditor(editor, change);
+    var minimalDelta = merge(shared, change);
+    //resetEditor(editor, shared);
+    updateEditor(editor, minimalDelta);
   }
 };
 
-function updateEditor(editor, delta) {
+function resetEditor(editor, shared) {
   editor.off('change', editorChange);
   var cursor = editor.getCursor();
   editor.setValue(''+shared);
   editor.setCursor(cursor);
-  // Smarter method:
-  //var editorDelta = editorChanges(delta);
-  //applyDelta(editorDelta);
   editor.on('change', editorChange);
 }
 
-function inverseOperation(operation) {
+// Takes a Client and an operation.
+// Returns a list of atomic operations.
+function merge(shared, change) {
+  var minimalDelta = editorUndoChanges();
+  shared.receiveCanon(change);
+  minimalDelta = minimalDelta.concat(editorChanges(change));
+  return minimalDelta;
+}
+
+function editorUndoChanges() {
+  var changes = [];
+  for (var i = 0; i < shared.local.list.length; i++) {
+    changes.push(inverseAtomicOperation(shared.local.list[i]));
+  }
+  for (var i = 0; i < shared.sent.list.length; i++) {
+    changes.push(inverseAtomicOperation(shared.sent.list[i]));
+  }
+  return changes;
+}
+
+function editorChanges(op) {
+  var changes = [];
+  for (var i = 0; i < op.list.length; i++) {
+    changes.push(op.list[i]);
+  }
+  for (var i = 0; i < shared.local.list.length; i++) {
+    changes.push(shared.local.list[i]);
+  }
+  for (var i = 0; i < shared.sent.list.length; i++) {
+    changes.push(shared.sent.list[i]);
+  }
+  return changes;
+}
+
+function inverseAtomicOperation(operation) {
   var inverse = operation.dup();
   // Insertions become deletions and vice-versa.
-  for (var i = 0; i < inverse.list.length; i++) {
-    inverse.list[i].tag = inverse.list[i].tag === tags.insert? tags.delete:
-        tags.insert;
-  }
+  inverse.tag = (inverse.tag === Client.TAG.insert)? Client.TAG.delete:
+    Client.TAG.insert;
   return inverse;
 };
 
-function applyDelta(delta) {
-  for (var i = 0; i < change.list.length; i++) {
-    if (change.list[i].tag === tags.insert) {
-      //TODO
-    } else if (change.list[i].tag === tags.insert) {
-      //TODO
+// Takes a list of atomic operations.
+function updateEditor(editor, delta) {
+  editor.off('change', editorChange);
+  var cursor = editor.getCursor();
+  applyDelta(editor, delta);
+  editor.setCursor(cursor);
+  editor.on('change', editorChange);
+}
+
+function applyDelta(editor, delta) {
+  for (var i = 0; i < delta.length; i++) {
+    var change = delta[i];
+    if (change.tag === Client.TAG.insert) {
+      editor.replaceRange(change.string, editor.posFromIndex(change.offset));
+    } else if (change.tag === Client.TAG.delete) {
+      var from = editor.posFromIndex(change.offset);
+      var to = editor.posFromIndex(change.offset + change.string.length);
+      editor.replaceRange('', from, to);
     }
   }
 }

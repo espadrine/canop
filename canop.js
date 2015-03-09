@@ -154,7 +154,7 @@ function lessThanMark(mark1, mark2) {
 }
 
 function Client(base) {
-  this.base = base || 0;  // canonIndex; 0 means no root.
+  this.base = base || 0;  // canon index; 0 means no root.
   this.local = new Operation();
   this.sent = new Operation();
   this.canon = new Operation();
@@ -184,6 +184,7 @@ Client.prototype = {
     return this.canon.list;
   },
   // Modify your local / sent operations accordingly.
+  // Takes an Operation.
   receiveCanon: function(canon) {
     this.canon.apply(canon);
     for (var i = 0; i < canon.list.length; i++) {
@@ -200,7 +201,7 @@ Client.prototype = {
     }
     this.base = this.canon.list[this.canon.list.length - 1].mark[0];
   },
-  // Canonize sent operations.
+  // Canonize sent operations. Takes an Operation.
   // Returns the canonized operations.
   receiveSent: function(sent) {
     var base = sent.list[0].mark[0];
@@ -209,12 +210,11 @@ Client.prototype = {
     for (var i = 0; i < delta.length; i++) {
       var op = delta[i];
       // Don't modify operations from the same origin.
-      // TODO: check this works.
       if (op.mark[1] !== origin) {
         sent.getModifiedBy(op);
       }
     }
-    // Set the canonIndex.
+    // Set the canon index.
     for (var i = 0; i < sent.list.length; i++) {
       sent.list[i].mark[0] = this.base++;
     }
@@ -232,6 +232,8 @@ Client.prototype = {
     return total.toString();
   }
 };
+
+Client.TAG = tag;
 
 return exports;
 
