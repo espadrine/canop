@@ -235,6 +235,7 @@ Client.prototype = {
 };
 
 Client.TAG = tag;
+Client.localId = localId;
 
 return exports;
 

@@ -76,33 +76,41 @@ function resetEditor(editor, shared) {
 function merge(shared, change) {
   var minimalDelta = editorUndoChanges();
   shared.receiveCanon(change);
-  minimalDelta = minimalDelta.concat(editorChanges(change));
+  editorChanges(change, minimalDelta);
   return minimalDelta;
 }
 
 function editorUndoChanges() {
-  var changes = [];
+  var delta = [];
   for (var i = 0; i < shared.local.list.length; i++) {
-    changes.push(inverseAtomicOperation(shared.local.list[i]));
+    delta.push(inverseAtomicOperation(shared.local.list[i]));
   }
   for (var i = 0; i < shared.sent.list.length; i++) {
-    changes.push(inverseAtomicOperation(shared.sent.list[i]));
+    delta.push(inverseAtomicOperation(shared.sent.list[i]));
   }
-  return changes;
+  return delta;
 }
 
-function editorChanges(op) {
-  var changes = [];
+function editorChanges(op, delta) {
   for (var i = 0; i < op.list.length; i++) {
-    changes.push(op.list[i]);
-  }
-  for (var i = 0; i < shared.local.list.length; i++) {
-    changes.push(shared.local.list[i]);
+    var ao = op.list[i];
+    // If that operation was sent from here, ignore it and remove its inverse.
+    if (ao.mark[1] === shared.localId) {
+      delta = delta.filter(function(op) {
+        // Keep operations that are not this one.
+        return !(op.mark[1] === ao.mark[1] && op.mark[2] === ao.mark[2]);
+      });
+    } else {
+      delta.push(ao);
+    }
   }
   for (var i = 0; i < shared.sent.list.length; i++) {
-    changes.push(shared.sent.list[i]);
+    delta.push(shared.sent.list[i]);
   }
-  return changes;
+  for (var i = 0; i < shared.local.list.length; i++) {
+    delta.push(shared.local.list[i]);
+  }
+  return delta;
 }
 
 function inverseAtomicOperation(operation) {

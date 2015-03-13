@@ -10,9 +10,7 @@ var coso = camp.ws('text', function (socket) {
   socket.on('message', function (raw) {
     var data = JSON.parse(raw);
     var change = canop.Operation.fromList(data.D);  // delta.
-    //console.log('change:', JSON.stringify(change));
     var canon = shared.receiveSent(change);
-    //console.log('shared:', JSON.stringify(shared));
     coso.clients.forEach(function (client) {
       client.send(JSON.stringify({D:canon.list}));
     });
