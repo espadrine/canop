@@ -47,6 +47,7 @@ AtomicOperation.prototype = {
 
 AtomicOperation.fromObject = function (data) {
   var ao = new AtomicOperation(data.offset, data.tag, data.string, data.mark[0]);
+  nounce--;  // Compensate nounce increment.
   for (var i = 0; i < data.mark.length; i++) {
     ao.mark[i] = data.mark[i];
   }
