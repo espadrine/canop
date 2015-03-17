@@ -95,11 +95,15 @@ function editorChanges(op, delta) {
   for (var i = 0; i < op.list.length; i++) {
     var ao = op.list[i];
     // If that operation was sent from here, ignore it and remove its inverse.
-    if (ao.mark[1] === shared.localId) {
-      delta = delta.filter(function(op) {
-        // Keep operations that are not this one.
-        return !(op.mark[1] === ao.mark[1] && op.mark[2] === ao.mark[2]);
-      });
+    if (ao.mark[1] === Client.localId) {
+      for (var j = 0; j < delta.length; j++) {
+        var dao = delta[j];
+        // Remove this operation.
+        if (dao.mark[1] === ao.mark[1] && dao.mark[2] === ao.mark[2]) {
+          delta.splice(j, 1);
+          break;
+        }
+      }
     } else {
       delta.push(ao);
     }
