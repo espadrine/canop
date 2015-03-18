@@ -7,11 +7,8 @@
 <script>
 
 var Client = canop.Client;
-var Operation = canop.Operation;
-
-var editor = CodeMirror(document.body);
 var shared = new Client();
-var operation = new Operation();//
+var editor = CodeMirror(document.body);
 
 function editorChange(editor, change) {
   var from = change.from;
@@ -56,7 +53,7 @@ socket.onmessage = function recv(event) {
     shared.reset(update.M, update.B);
     editor.on('change', editorChange);
   } else if (update.D !== undefined) {
-    var change = Operation.fromList(update.D);
+    var change = Client.operationFromList(update.D);
     var minimalDelta = merge(shared, change);
     //resetEditor(editor, shared);
     updateEditor(editor, minimalDelta);

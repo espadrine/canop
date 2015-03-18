@@ -234,6 +234,7 @@ Client.prototype = {
   }
 };
 
+Client.operationFromList = Operation.fromList;
 Client.TAG = tag;
 Client.localId = localId;
 
