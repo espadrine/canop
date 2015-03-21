@@ -125,13 +125,12 @@ function inverseAtomicOperation(operation) {
 // Takes a list of atomic operations.
 function updateEditor(editor, delta) {
   editor.off('change', editorChange);
-  var cursor = editor.getCursor();
   applyDelta(editor, delta);
-  editor.setCursor(cursor);
   editor.on('change', editorChange);
 }
 
 function applyDelta(editor, delta) {
+  var cursor = editor.indexFromPos(editor.getCursor());
   for (var i = 0; i < delta.length; i++) {
     var change = delta[i];
     if (change.tag === Client.TAG.insert) {
@@ -141,7 +140,9 @@ function applyDelta(editor, delta) {
       var to = editor.posFromIndex(change.offset + change.string.length);
       editor.replaceRange('', from, to);
     }
+    cursor = Client.modifyOffset(cursor, change);
   }
+  editor.setCursor(editor.posFromIndex(cursor));
 }
 
 </script>

@@ -35,15 +35,20 @@ AtomicOperation.prototype = {
   },
   // Get this operation modified by another atomic operation.
   getModifiedBy: function getModifiedBy(op) {
-    if (op.offset < this.offset) {
-      if (op.tag === tag.insert) {
-        this.offset += op.string.length;
-      } else {
-        this.offset -= op.string.length;
-      }
-    }
+    this.offset = modifyOffset(this.offset, op);
   },
 };
+
+function modifyOffset(offset, op) {
+  if (op.offset < offset) {
+    if (op.tag === tag.insert) {
+      offset += op.string.length;
+    } else {
+      offset -= op.string.length;
+    }
+  }
+  return offset;
+}
 
 AtomicOperation.fromObject = function (data) {
   var ao = new AtomicOperation(data.offset, data.tag, data.string, data.mark[0]);
@@ -237,6 +242,7 @@ Client.prototype = {
 Client.operationFromList = Operation.fromList;
 Client.TAG = tag;
 Client.localId = localId;
+Client.modifyOffset = modifyOffset;
 
 return exports;
 
