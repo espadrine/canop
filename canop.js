@@ -202,8 +202,10 @@ Client.prototype = {
           this.sent.list.splice(j, 1);
         }
       }
-      this.sent.getModifiedBy(op);
-      this.local.getModifiedBy(op);
+      if (op.mark[1] !== localId) {
+        this.sent.getModifiedBy(op);
+        this.local.getModifiedBy(op);
+      }
     }
     this.base = this.canon.list[this.canon.list.length - 1].mark[0];
   },
