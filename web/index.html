@@ -38,9 +38,9 @@ var socket = new WebSocket(
 
 function send() {
   if (shared.local.list.length > 0) {
-    shared.prepareSent();
-    console.log('> ' + JSON.stringify({ D: shared.sent.list }));
-    socket.send(JSON.stringify({ D: shared.sent.list }));
+    console.log('> ' + JSON.stringify({ D: shared.local.list }));
+    socket.send(JSON.stringify({ D: shared.local.list }));
+    shared.localToSent();
   }
 }
 

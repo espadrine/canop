@@ -175,9 +175,9 @@ Client.prototype = {
     this.canon.list[0].mark[0] = base;
     this.base = base;
   },
-  prepareSent: function() {
+  localToSent: function() {
     // Switch all local operations to sent.
-    this.sent.list = this.local.list;
+    this.sent.list = this.sent.list.concat(this.local.list);
     this.local.list = [];
   },
   // Return a list of atomic operations.
