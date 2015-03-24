@@ -71,10 +71,24 @@ function resetEditor(editor, shared) {
 // Takes a Client and an operation.
 // Returns a list of atomic operations.
 function merge(shared, change) {
-  var minimalDelta = editorUndoChanges();
-  shared.receiveCanon(change);
-  editorChanges(change, minimalDelta);
-  return minimalDelta;
+  // If all operations were sent from here, ignore them.
+  var allFromHere = true;
+  for (var i = 0; i < change.list.length; i++) {
+    if (change.list[i].mark[1] !== Client.localId) {
+      allFromHere = false;
+      break;
+    }
+  }
+
+  if (allFromHere) {
+    shared.receiveCanon(change);
+    return [];
+  } else {
+    var minimalDelta = editorUndoChanges();
+    shared.receiveCanon(change);
+    editorDoChanges(change, minimalDelta);
+    return minimalDelta;
+  }
 }
 
 function editorUndoChanges() {
@@ -88,22 +102,9 @@ function editorUndoChanges() {
   return delta;
 }
 
-function editorChanges(op, delta) {
+function editorDoChanges(op, delta) {
   for (var i = 0; i < op.list.length; i++) {
-    var ao = op.list[i];
-    // If that operation was sent from here, ignore it and remove its inverse.
-    if (ao.mark[1] === Client.localId) {
-      for (var j = 0; j < delta.length; j++) {
-        var dao = delta[j];
-        // Remove this operation.
-        if (dao.mark[1] === ao.mark[1] && dao.mark[2] === ao.mark[2]) {
-          delta.splice(j, 1);
-          break;
-        }
-      }
-    } else {
-      delta.push(ao);
-    }
+    delta.push(op.list[i]);
   }
   for (var i = 0; i < shared.sent.list.length; i++) {
     delta.push(shared.sent.list[i]);
@@ -140,7 +141,9 @@ function applyDelta(editor, delta) {
       var to = editor.posFromIndex(change.offset + change.string.length);
       editor.replaceRange('', from, to);
     }
-    cursor = Client.modifyOffset(cursor, change);
+    if (change.mark[1] !== Client.localId) {
+      cursor = Client.modifyOffset(cursor, change);
+    }
   }
   editor.setCursor(editor.posFromIndex(cursor));
 }
