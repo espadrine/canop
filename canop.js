@@ -16,14 +16,15 @@ var tag = {
 };
 
 var nounce = 0;
+// FIXME: require the server to tell us who we are.
 // Collision probability: below 0.5 for n < 54563.
 // function(n, max) { return 1 - fact(max) / (Math.pow(max, n) * fact(max - n)); }
 // Tailor expansion
 // function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
 var localId = (Math.random() * 2147483648)|0;
-function AtomicOperation(offset, tag, string, base) {
+function AtomicOperation(offset, tag, string, base, localId) {
   // Unique identifier for this operation. List of numbers.
-  this.mark = [+base, localId, nounce++];
+  this.mark = [+base, +localId, nounce++];
   this.offset = offset;
   this.tag = tag;
   this.string = string;
@@ -102,14 +103,14 @@ Operation.prototype = {
     }
   },
   // Insert a string to the operation. Mutates this.
-  insert: function insertOp(offset, string, base) {
-    var aop = new AtomicOperation(offset, tag.insert, string, base);
+  insert: function insertOp(offset, string, base, local) {
+    var aop = new AtomicOperation(offset, tag.insert, string, base, local);
     this.list.push(aop);
     return this;
   },
   // Delete a string to the operation. Mutates this.
-  delete: function deleteOp(offset, string, base) {
-    var aop = new AtomicOperation(offset, tag.delete, string, base);
+  delete: function deleteOp(offset, string, base, local) {
+    var aop = new AtomicOperation(offset, tag.delete, string, base, local);
     this.list.push(aop);
     return this;
   },
@@ -164,6 +165,7 @@ function Client(base) {
   this.local = new Operation();
   this.sent = new Operation();
   this.canon = new Operation();
+  this.localId = localId;
 }
 exports.Client = Client;
 Client.prototype = {
@@ -230,10 +232,10 @@ Client.prototype = {
     return sent;
   },
   insert: function insertOp(offset, string) {
-    this.local.insert(offset, string, this.base);
+    this.local.insert(offset, string, this.base, this.localId);
   },
   delete: function deleteOp(offset, string) {
-    this.local.delete(offset, string, this.base);
+    this.local.delete(offset, string, this.base, this.localId);
   },
   toString: function() {
     var total = this.canon.combine(this.sent).combine(this.local);
@@ -241,10 +243,9 @@ Client.prototype = {
   }
 };
 
-Client.operationFromList = Operation.fromList;
-Client.TAG = tag;
-Client.localId = localId;
-Client.modifyOffset = modifyOffset;
+exports.operationFromList = Operation.fromList;
+exports.TAG = tag;
+exports.modifyOffset = modifyOffset;
 
 return exports;
 

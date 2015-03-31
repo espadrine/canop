@@ -53,7 +53,7 @@ socket.onmessage = function recv(event) {
     shared.reset(update.M, update.B);
     editor.on('change', editorChange);
   } else if (update.D !== undefined) {
-    var change = Client.operationFromList(update.D);
+    var change = canop.operationFromList(update.D);
     var minimalDelta = merge(shared, change);
     //resetEditor(editor, shared);
     updateEditor(editor, minimalDelta);
@@ -74,7 +74,7 @@ function merge(shared, change) {
   // If all operations were sent from here, ignore them.
   var allFromHere = true;
   for (var i = 0; i < change.list.length; i++) {
-    if (change.list[i].mark[1] !== Client.localId) {
+    if (change.list[i].mark[1] !== shared.localId) {
       allFromHere = false;
       break;
     }
@@ -118,8 +118,8 @@ function editorDoChanges(op, delta) {
 function inverseAtomicOperation(operation) {
   var inverse = operation.dup();
   // Insertions become deletions and vice-versa.
-  inverse.tag = (inverse.tag === Client.TAG.insert)? Client.TAG.delete:
-    Client.TAG.insert;
+  inverse.tag = (inverse.tag === canop.TAG.insert)? canop.TAG.delete:
+    canop.TAG.insert;
   return inverse;
 };
 
@@ -134,15 +134,15 @@ function applyDelta(editor, delta) {
   var cursor = editor.indexFromPos(editor.getCursor());
   for (var i = 0; i < delta.length; i++) {
     var change = delta[i];
-    if (change.tag === Client.TAG.insert) {
+    if (change.tag === canop.TAG.insert) {
       editor.replaceRange(change.string, editor.posFromIndex(change.offset));
-    } else if (change.tag === Client.TAG.delete) {
+    } else if (change.tag === canop.TAG.delete) {
       var from = editor.posFromIndex(change.offset);
       var to = editor.posFromIndex(change.offset + change.string.length);
       editor.replaceRange('', from, to);
     }
-    if (change.mark[1] !== Client.localId) {
-      cursor = Client.modifyOffset(cursor, change);
+    if (change.mark[1] !== shared.localId) {
+      cursor = canop.modifyOffset(cursor, change);
     }
   }
   editor.setCursor(editor.posFromIndex(cursor));
