@@ -2,20 +2,23 @@
 
 var canop = exports.canop;
 
-function CanopCodemirrorHook(editor, channelName) {
+function CanopCodemirrorHook(editor, options) {
+  options = options || {};
+  options.channelName = options.channelName || 'text';
+
   this.editor = editor;
   this.canopClient = new canop.Client();
-  this.channelName = channelName || 'text';
+  this.channelName = options.channelName;
   this.socket = null;
 
   this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
 
-  this.connect();
+  this.connect(options);
 }
 
 CanopCodemirrorHook.prototype = {
-  connect: function CCHconnect() {
+  connect: function CCHconnect(options) {
     this.socket = new WebSocket(
       // Trick: use the end of either http: or https:.
       'ws' + window.location.protocol.slice(4) + '//' +
@@ -23,7 +26,10 @@ CanopCodemirrorHook.prototype = {
         (window.location.port.length > 0? (':' + window.location.port): '') +
         '/$websocket:' + this.channelName);
 
-    this.socket.onmessage = this.socketReceive;
+    this.socket.addEventListener('message', this.socketReceive);
+    this.socket.addEventListener('error', options.error);
+    this.socket.addEventListener('close', options.close);
+    this.socket.addEventListener('open', options.open);
   },
 
   socketReceive: function CCHsocketReceive(event) {

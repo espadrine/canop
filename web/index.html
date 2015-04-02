@@ -7,6 +7,10 @@
 <script src=canop-codemirror.js></script>
 <script>
 var editor = CodeMirror(document.body);
-var shared = new CanopCodemirrorHook(editor);
+var shared = new CanopCodemirrorHook(editor, {
+  open: function() { console.log('socket opened'); },
+  close: function() { console.log('socket closed'); },
+  error: function() { console.log('socket errored'); },
+});
 </script>
 </body>
