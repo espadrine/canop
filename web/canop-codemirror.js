@@ -22,8 +22,7 @@ CanopCodemirrorHook.prototype = {
     this.socket = new WebSocket(
       // Trick: use the end of either http: or https:.
       'ws' + window.location.protocol.slice(4) + '//' +
-        window.location.hostname +
-        (window.location.port.length > 0? (':' + window.location.port): '') +
+        window.location.host +
         '/$websocket:' + this.channelName);
 
     this.socket.addEventListener('message', this.socketReceive);
