@@ -16,12 +16,6 @@ var tag = {
 };
 
 var nounce = 0;
-// FIXME: require the server to tell us who we are.
-// Collision probability: below 0.5 for n < 54563.
-// function(n, max) { return 1 - fact(max) / (Math.pow(max, n) * fact(max - n)); }
-// Tailor expansion
-// function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
-var localId = (Math.random() * 2147483648)|0;
 function AtomicOperation(offset, tag, string, base, localId) {
   // Unique identifier for this operation. List of numbers.
   this.mark = [+base, +localId, nounce++];
@@ -165,7 +159,12 @@ function Client(base) {
   this.local = new Operation();
   this.sent = new Operation();
   this.canon = new Operation();
-  this.localId = localId;
+  // FIXME: require the server to tell us who we are.
+  // Collision probability: below 0.5 for n < 54563.
+  // function(n, max) { return 1 - fact(max) / (Math.pow(max, n) * fact(max - n)); }
+  // Tailor expansion
+  // function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
+  this.localId = (Math.random() * 2147483648)|0;
 }
 exports.Client = Client;
 Client.prototype = {
@@ -204,7 +203,7 @@ Client.prototype = {
           this.sent.list.splice(j, 1);
         }
       }
-      if (op.mark[1] !== localId) {
+      if (op.mark[1] !== this.localId) {
         this.sent.getModifiedBy(op);
         this.local.getModifiedBy(op);
       }
