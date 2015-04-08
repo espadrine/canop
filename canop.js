@@ -208,7 +208,14 @@ Client.prototype = {
         this.local.getModifiedBy(op);
       }
     }
+    // Rebase local operations.
     this.base = this.canon.list[this.canon.list.length - 1].mark[0];
+    for (var i = 0; i < this.sent.list.length; i++) {
+      this.sent.list[i].mark[0] = this.base;
+    }
+    for (var i = 0; i < this.local.list.length; i++) {
+      this.local.list[i].mark[0] = this.base;
+    }
   },
   // Canonize sent operations. Takes an Operation.
   // Returns the canonized operations.
