@@ -45,13 +45,13 @@ Let the *marks* be a set of elements that are totally ordered under some binary
 relation `≤`.  For example, a list composed of a timestamp, a user ID, and a
 nonce (which is specific to this user ID).
 
-Every operation is composed of:
+Every operation is composed of a list of elements called atomic operations of
+the following form:
 
-1. a mark (an element of marks)
-2. a list of elements of the following form:
-   - an offset from the start of the string
-   - a tag (either "insert" or "delete")
-   - a string (to be inserted or deleted)
+- a *mark* (an element of marks)
+- an *offset* from the start of the string
+- a *tag* (either "insert" or "delete")
+- a *string* (to be inserted or deleted)
 
 Recreating the string from the list of operations (here named `string`, since
 it really is a representation of a string) goes like this:
@@ -67,9 +67,9 @@ it really is a representation of a string) goes like this:
 An operation `o` mutates a string through the following algorithm, "mark
 sorting":
 
-    Let before be the list of operations oe from string such that:
+    Let before be the list of atomic operations oe from string such that:
       oe.mark < o.mark
-    Let after be the list of operations oe from string such that:
+    Let after be the list of atomic operations oe from string such that:
       oe.mark > o.mark
     Return before + [o] + after
 
@@ -100,19 +100,46 @@ following sequence of operations is applied by two entities A and B:
 
 … would result in the converged string "abced", not "abcde", as intended by A.
 
-However, we can maintain the concept of "previous operation" for each operation,
-creating a causality tree of operations. Considering that this causality is
-already enforced locally through the mark (since timestamps are always
-increasing, and the nonce is as well), we only need that information on each
-*patch* (a list of operations meant to be applied to a string).
-Let's implement it as the mark of the operation from which the patch was
-created, stored as `prevMark`. (A null `prevMark` would therefore indicate a
-complete string.)
+However, we can offer offset transformation without sacrificing convergence and
+the algorithm's simplicity. Let's focus on a centralized server / clients
+system using the same principles.
 
-TODO
+Each canop endpoint manages three operations: one for local modifications,
+called *local*; one for modifications sent to the server, called *sent*; one for
+modifications that the server has reviewed, called *canon*. Atomic operations
+that are canon will never be transformed, ensuring consistency. Even in clients,
+the order in which those operations should be applied is canon first, then sent,
+then local.
 
-Here is the operational transformation algorithm, whose main purpose is to keep
-offsets updated:
+In order to maintain the mark order we had previously, we use the following
+mark system, a list ordering with number items:
+
+- the *base* is the index in the list of atomic operations in the canon, or, if
+  the atomic operation isn't canonized yet, the highest index of canon
+  operations registered locally.
+- the *machine* is a unique identifier shared by all local operations on each
+  client. It is preferably assigned to clients by the server.
+- the *nounce* is an ever-incrementing integer which forces each local atomic
+  operation to be unique.
+
+Upon receiving sent operations from a client, the server:
+
+1. modifies each of them by each server canon operation with a base higher than
+   that of the sent operations,
+2. canonizes them, assigning them a unique increasing base,
+3. sends the canonized version to all clients (including the one that sent it).
+
+Upon receiving canon operations from a server, the client:
+
+1. modifies each sent operation by each canon operation,
+2. modifies each local operation by each canon operation,
+3. appends the received canon operations to the registered canon.
+
+All operation modifications must happen between a canon operation, which remains
+unmodified, and a non-canon operation.
+
+Here is a simple operational transformation algorithm, whose main purpose is to
+keep offsets updated:
 
     Let older be an operation.
     Let newer be an operation such that older.mark < newer.mark.
@@ -125,31 +152,14 @@ offsets updated:
     sort newer.transformers
     Return newer
 
+Regardless of the operational transformation, the convergence of all clients is
+ensured by the immutability of canon operations, and their unique ordering
+(through their base index). In fact, we need not use a sorting operation,
+assuming we rely on TCP, since all canon operations will be received in order.
 
-
-# Optimizing
-
-Usually, when a remote editing session starts, the server needs to keep track of
-the state of the data then, and the series of operations that happen from then
-on. Let S be this state. The remote editing session may perform operation O1,
-while another editing session may perform operation O2.  Assume, without loss of
-generality, that `O2.mark > O1.mark`.  In the general case, there is no way for
-U1 (respectively U2) to directly take O2 (respectively O1) and apply it to the
-current state of the editor, even after making it go through some transformation
-that doesn't alter the history of the editor. We therefore have to undo all
-registered operations up to the last common state, and apply `O1 + O2`. Indeed,
-`+` is only defined for two operations, not for a state, not between a state and
-an operation.  Although we said that states work like operations, editors are
-not designed to abstract that, and altering the history of operations of the
-editor does not change what it displays.
-
-We can, however, design a specific algorithm that performs `S + O`, the
-application of an operation to an editor state. If it yields exactly the same
-result as the application between two operations, then all previous theorems
-apply.  Again, we can do without that algorithm, but it may give us better
-performance.
-
-However, this algorithm is a TODO ☺!
+The above operational transformation is the simplest that can be devised to fix
+the problem we pointed out; however, we can make it arbitrarily complex to cover
+more specific issues.
 
 
 ---- Copyright Thaddée Tyl.
