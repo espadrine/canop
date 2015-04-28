@@ -1,4 +1,4 @@
-# Commutative Operational Transformation
+# Canop: Commutative Operational Transformation
 
 Let's define an *operational group* as a set of operations `Ω = S1×…×SP`,
 combined with a binary operation called *application* `+` such that
