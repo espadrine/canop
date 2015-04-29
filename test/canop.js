@@ -66,3 +66,11 @@ sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
 assert.equal(result, 'ab', 'Concurrent deletion.');
+
+var star = new Star('abxyze');
+star.clients[0].delete(2, 'xyz');
+star.clients[1].insert(4, 'cd');
+sendChange(star, 0);
+sendChange(star, 1);
+var result = '' + star.canon;
+assert.equal(result, 'abcde', 'Deletion, then insertion in the deletion.');
