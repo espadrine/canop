@@ -29,44 +29,57 @@ AtomicOperation.prototype = {
     return AtomicOperation.fromObject(this);
   },
   // Get this operation modified by another atomic operation.
-  getModifiedBy: function getModifiedBy(op) {
+  getModifiedBy: function getModifiedBy(canOp) {
     if (this.tag === tag.insert) {
-      this.offset = modifyOffsetIns(this.offset, op);
+      this.offset = modifyOffsetIns(this.offset, canOp);
     } else if (this.tag === tag.delete) {
-      this.offset = modifyOffsetDel(this, op);
-      this.string = modifyStringDel(this, op);
+      this.offset = modifyOffsetDel(this, canOp);
+      this.string = modifyStringDel(this, canOp);
     }
   },
 };
 
-function modifyOffsetIns(offset, op) {
-  if (op.tag === tag.delete &&
-      (op.offset <= offset && offset < (op.offset + op.string.length))) {
-    return op.offset;
+function modifyOffsetIns(offset, canOp) {
+  //      ⬐ Insertion
+  // ---xxxx--- Canonical deletion
+  if (canOp.tag === tag.delete &&
+      (canOp.offset <= offset && offset < (canOp.offset + canOp.string.length))) {
+    //    ⬐ Insertion
+    // ---xxxx--- Canonical deletion
+    return canOp.offset;
   }
-  if (op.offset < offset) {
-    if (op.tag === tag.insert) {
-      offset += op.string.length;
+  if (canOp.offset < offset) {
+    if (canOp.tag === tag.insert) {
+      offset += canOp.string.length;
     } else {
-      offset -= op.string.length;
+      offset -= canOp.string.length;
     }
   }
   return offset;
 }
 
-function modifyOffsetDel(thisOp, op) {
+function modifyOffsetDel(thisOp, canOp) {
   var offset = thisOp.offset;
-  if (op.offset < offset) {
-    if (op.tag === tag.insert) {
-      offset += op.string.length;
+  if (canOp.offset < offset) {
+    if (canOp.tag === tag.insert) {
+      offset += canOp.string.length;
     } else {
-      offset -= op.string.length;
+      offset -= canOp.string.length;
     }
   }
   return offset;
 }
 
-function modifyStringDel(thisOp, op) {
+function modifyStringDel(thisOp, canOp) {
+  var offset = thisOp.offset;
+  //      ⬐ Canonical insertion
+  // ---xxxx---
+  if (canOp.tag === tag.insert &&
+      (offset <= canOp.offset && canOp.offset < (offset + thisOp.string.length))) {
+    //      ⬐ Canonical insertion
+    // ---xx---
+    return thisOp.string.slice(0, canOp.offset - (offset + thisOp.string.length));
+  }
   return thisOp.string;
 }
 

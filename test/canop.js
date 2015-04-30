@@ -74,3 +74,11 @@ sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
 assert.equal(result, 'abcde', 'Deletion, then insertion in the deletion.');
+
+var star = new Star('abxye');
+star.clients[0].insert(4, 'cd');
+star.clients[1].delete(2, 'xye');
+sendChange(star, 0);
+sendChange(star, 1);
+var result = '' + star.canon;
+assert.equal(result, 'abcde', 'Insertion, then deletion over the insertion.');
