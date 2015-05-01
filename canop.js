@@ -33,8 +33,9 @@ AtomicOperation.prototype = {
     if (this.tag === tag.insert) {
       this.offset = modifyOffsetIns(this.offset, canOp);
     } else if (this.tag === tag.delete) {
-      this.offset = modifyOffsetDel(this, canOp);
+      var offset = modifyOffsetDel(this, canOp);
       this.string = modifyStringDel(this, canOp);
+      this.offset = offset;
     }
   },
 };
@@ -60,6 +61,14 @@ function modifyOffsetIns(offset, canOp) {
 
 function modifyOffsetDel(thisOp, canOp) {
   var offset = thisOp.offset;
+  //      xxx Deletion
+  // ---xxxx--- Canonical deletion
+  if (canOp.tag === tag.delete &&
+      (canOp.offset <= offset && offset < (canOp.offset + canOp.string.length))) {
+    //        x Deletion
+    // ---xxxx--- Canonical deletion
+    return canOp.offset;
+  }
   if (canOp.offset < offset) {
     if (canOp.tag === tag.insert) {
       offset += canOp.string.length;
@@ -79,6 +88,14 @@ function modifyStringDel(thisOp, canOp) {
     //      ⬐ Canonical insertion
     // ---xx---
     return thisOp.string.slice(0, canOp.offset - (offset + thisOp.string.length));
+  }
+  //      xxx Deletion
+  // ---xxxx--- Canonical deletion
+  if (canOp.tag === tag.delete &&
+      (canOp.offset <= offset && offset < (canOp.offset + canOp.string.length))) {
+    //        x Deletion
+    // ---xxxx--- Canonical deletion
+    return thisOp.string.slice(canOp.offset + canOp.string.length - offset);
   }
   return thisOp.string;
 }

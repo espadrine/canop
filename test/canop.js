@@ -65,7 +65,7 @@ star.clients[1].delete(3, 'y');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'ab', 'Concurrent deletion.');
+assert.equal(result, 'ab', 'Concurrent deletion');
 
 var star = new Star('abxyze');
 star.clients[0].delete(2, 'xyz');
@@ -73,7 +73,7 @@ star.clients[1].insert(4, 'cd');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'abcde', 'Deletion, then insertion in the deletion.');
+assert.equal(result, 'abcde', 'Deletion, then insertion in the deletion');
 
 var star = new Star('abxye');
 star.clients[0].insert(4, 'cd');
@@ -81,4 +81,12 @@ star.clients[1].delete(2, 'xye');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'abcde', 'Insertion, then deletion over the insertion.');
+assert.equal(result, 'abcde', 'Insertion, then deletion over the insertion');
+
+var star = new Star('abxyzc');
+star.clients[0].delete(2, 'xy');
+star.clients[1].delete(3, 'yz');
+sendChange(star, 0);
+sendChange(star, 1);
+var result = '' + star.canon;
+assert.equal(result, 'abc', 'Deletion, then deletion starting in the deletion');
