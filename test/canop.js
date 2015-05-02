@@ -90,3 +90,11 @@ sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
 assert.equal(result, 'abc', 'Deletion, then deletion starting in the deletion');
+
+var star = new Star('abxyzc');
+star.clients[0].delete(3, 'yz');
+star.clients[1].delete(2, 'xy');
+sendChange(star, 0);
+sendChange(star, 1);
+var result = '' + star.canon;
+assert.equal(result, 'abc', 'Deletion, then deletion wherein the other deletion starts');

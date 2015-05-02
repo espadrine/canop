@@ -97,6 +97,14 @@ function modifyStringDel(thisOp, canOp) {
     // ---xxxx--- Canonical deletion
     return thisOp.string.slice(canOp.offset + canOp.string.length - offset);
   }
+  //      xxx Canonical deletion
+  // ---xxxx--- Deletion
+  if (canOp.tag === tag.delete &&
+      (offset <= canOp.offset && canOp.offset < (offset + thisOp.string.length))) {
+    //      xxx Canonical deletion
+    // ---xx-----  Deletion
+    return thisOp.string.slice(0, canOp.offset - offset);
+  }
   return thisOp.string;
 }
 
