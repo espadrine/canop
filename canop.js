@@ -16,12 +16,12 @@ var tag = {
 };
 
 var nounce = 0;
-function AtomicOperation(offset, tag, string, base, localId) {
+function AtomicOperation(tag, key, value, base, machine) {
   // Unique identifier for this operation. List of numbers.
-  this.mark = [+base, +localId, nounce++];
-  this.offset = offset;
+  this.mark = [+base, +machine, nounce++];
   this.tag = tag;
-  this.string = string;
+  this.key = key;
+  this.value = value;
 }
 exports.AtomicOperation = AtomicOperation;
 AtomicOperation.prototype = {
@@ -31,11 +31,11 @@ AtomicOperation.prototype = {
   // Get this operation modified by another atomic operation.
   getModifiedBy: function getModifiedBy(canOp) {
     if (this.tag === tag.insert) {
-      this.offset = modifyOffsetIns(this.offset, canOp);
+      this.key = modifyOffsetIns(this.key, canOp);
     } else if (this.tag === tag.delete) {
       var offset = modifyOffsetDel(this, canOp);
-      this.string = modifyStringDel(this, canOp);
-      this.offset = offset;
+      this.value = modifyStringDel(this, canOp);
+      this.key = offset;
     }
   },
 };
@@ -44,72 +44,72 @@ function modifyOffsetIns(offset, canOp) {
   //      ⬐ Insertion
   // ---xxxx--- Canonical deletion
   if (canOp.tag === tag.delete &&
-      (canOp.offset <= offset && offset < (canOp.offset + canOp.string.length))) {
+      (canOp.key <= offset && offset < (canOp.key + canOp.value.length))) {
     //    ⬐ Insertion
     // ---xxxx--- Canonical deletion
-    return canOp.offset;
+    return canOp.key;
   }
-  if (canOp.offset < offset) {
+  if (canOp.key < offset) {
     if (canOp.tag === tag.insert) {
-      offset += canOp.string.length;
+      offset += canOp.value.length;
     } else {
-      offset -= canOp.string.length;
+      offset -= canOp.value.length;
     }
   }
   return offset;
 }
 
 function modifyOffsetDel(thisOp, canOp) {
-  var offset = thisOp.offset;
+  var offset = thisOp.key;
   //      xxx Deletion
   // ---xxxx--- Canonical deletion
   if (canOp.tag === tag.delete &&
-      (canOp.offset <= offset && offset < (canOp.offset + canOp.string.length))) {
+      (canOp.key <= offset && offset < (canOp.key + canOp.value.length))) {
     //        x Deletion
     // ---xxxx--- Canonical deletion
-    return canOp.offset;
+    return canOp.key;
   }
-  if (canOp.offset < offset) {
+  if (canOp.key < offset) {
     if (canOp.tag === tag.insert) {
-      offset += canOp.string.length;
+      offset += canOp.value.length;
     } else {
-      offset -= canOp.string.length;
+      offset -= canOp.value.length;
     }
   }
   return offset;
 }
 
 function modifyStringDel(thisOp, canOp) {
-  var offset = thisOp.offset;
+  var offset = thisOp.key;
   //      ⬐ Canonical insertion
   // ---xxxx---
   if (canOp.tag === tag.insert &&
-      (offset <= canOp.offset && canOp.offset < (offset + thisOp.string.length))) {
+      (offset <= canOp.key && canOp.key < (offset + thisOp.value.length))) {
     //      ⬐ Canonical insertion
     // ---xx---
-    return thisOp.string.slice(0, canOp.offset - (offset + thisOp.string.length));
+    return thisOp.value.slice(0, canOp.key - (offset + thisOp.value.length));
   }
   //      xxx Deletion
   // ---xxxx--- Canonical deletion
   if (canOp.tag === tag.delete &&
-      (canOp.offset <= offset && offset < (canOp.offset + canOp.string.length))) {
+      (canOp.key <= offset && offset < (canOp.key + canOp.value.length))) {
     //        x Deletion
     // ---xxxx--- Canonical deletion
-    return thisOp.string.slice(canOp.offset + canOp.string.length - offset);
+    return thisOp.value.slice(canOp.key + canOp.value.length - offset);
   }
   //      xxx Canonical deletion
   // ---xxxx--- Deletion
   if (canOp.tag === tag.delete &&
-      (offset <= canOp.offset && canOp.offset < (offset + thisOp.string.length))) {
+      (offset <= canOp.key && canOp.key < (offset + thisOp.value.length))) {
     //      xxx Canonical deletion
     // ---xx-----  Deletion
-    return thisOp.string.slice(0, canOp.offset - offset);
+    return thisOp.value.slice(0, canOp.key - offset);
   }
-  return thisOp.string;
+  return thisOp.value;
 }
 
 AtomicOperation.fromObject = function (data) {
-  var ao = new AtomicOperation(data.offset, data.tag, data.string, data.mark[0]);
+  var ao = new AtomicOperation(data.tag, data.key, data.value, data.mark[0]);
   nounce--;  // Compensate nounce increment.
   for (var i = 0; i < data.mark.length; i++) {
     ao.mark[i] = data.mark[i];
@@ -159,42 +159,42 @@ Operation.prototype = {
       this.list[i].getModifiedBy(op);
     }
   },
-  // Insert a string to the operation. Mutates this.
-  insert: function insertOp(offset, string, base, local) {
-    var aop = new AtomicOperation(offset, tag.insert, string, base, local);
+  // Insert a value to the operation. Mutates this.
+  insert: function insertOp(offset, value, base, local) {
+    var aop = new AtomicOperation(tag.insert, offset, value, base, local);
     this.list.push(aop);
     return this;
   },
-  // Delete a string to the operation. Mutates this.
-  delete: function deleteOp(offset, string, base, local) {
-    var aop = new AtomicOperation(offset, tag.delete, string, base, local);
+  // Delete a value to the operation. Mutates this.
+  delete: function deleteOp(offset, value, base, local) {
+    var aop = new AtomicOperation(tag.delete, offset, value, base, local);
     this.list.push(aop);
     return this;
   },
-  // Assume we start with the empty string.
+  // Assume we start with the empty value.
   toString: function toString() {
     var s = '';
     for (var i = 0; i < this.list.length; i++) {
       var op = this.list[i];
       if (op.tag === tag.insert) {
         // padding
-        var padding = op.offset - s.length;
+        var padding = op.key - s.length;
         for (var j = 0; j < padding; j++) {
           s += ' ';
         }
-        s = s.slice(0, op.offset) + op.string + s.slice(op.offset);
+        s = s.slice(0, op.key) + op.value + s.slice(op.key);
       } else if (op.tag === tag.delete) {
-        if (s.slice(op.offset, op.offset + op.string.length)
-            !== op.string) {
+        if (s.slice(op.key, op.key + op.value.length)
+            !== op.value) {
           // The intention was not preserved. It's ok, just sad.
           //console.error('deletion error:',
-          //    s.slice(op.offset,
-          //            op.offset + op.string.length),
+          //    s.slice(op.key,
+          //            op.key + op.value.length),
           //    'should be equal to',
-          //    op.string);
+          //    op.value);
         }
-        s = s.slice(0, op.offset) +
-          s.slice(op.offset + op.string.length);
+        s = s.slice(0, op.key) +
+          s.slice(op.key + op.value.length);
       }
     }
     return s;
@@ -231,11 +231,11 @@ function Client(base) {
 }
 exports.Client = Client;
 Client.prototype = {
-  reset: function(string, base) {
+  reset: function(value, base) {
     this.local = new Operation();
     this.sent = new Operation();
     this.canon = new Operation();
-    this.canon.insert(0, string);
+    this.canon.insert(0, value);
     this.canon.list[0].mark[0] = base;
     this.base = base;
   },
@@ -300,11 +300,11 @@ Client.prototype = {
     this.canon = this.canon.combine(sent);
     return sent;
   },
-  insert: function insertOp(offset, string) {
-    this.local.insert(offset, string, this.base, this.localId);
+  insert: function insertOp(offset, value) {
+    this.local.insert(offset, value, this.base, this.localId);
   },
-  delete: function deleteOp(offset, string) {
-    this.local.delete(offset, string, this.base, this.localId);
+  delete: function deleteOp(offset, value) {
+    this.local.delete(offset, value, this.base, this.localId);
   },
   toString: function() {
     var total = this.canon.combine(this.sent).combine(this.local);

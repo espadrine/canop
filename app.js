@@ -1,4 +1,4 @@
-// Copyright © 2013-2015 Thaddee Tyl. LGPL.
+// © Thaddee Tyl. LGPL.
 
 var camp = require('camp').start({ port: +process.argv[2] || 1234 });
 var canop = require('./canop');

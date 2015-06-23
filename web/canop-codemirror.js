@@ -148,10 +148,10 @@ CanopCodemirrorHook.prototype = {
     for (var i = 0; i < delta.length; i++) {
       var change = delta[i];
       if (change.tag === canop.TAG.insert) {
-        this.editor.replaceRange(change.string, this.editor.posFromIndex(change.offset));
+        this.editor.replaceRange(change.value, this.editor.posFromIndex(change.key));
       } else if (change.tag === canop.TAG.delete) {
-        var from = this.editor.posFromIndex(change.offset);
-        var to = this.editor.posFromIndex(change.offset + change.string.length);
+        var from = this.editor.posFromIndex(change.key);
+        var to = this.editor.posFromIndex(change.key + change.value.length);
         this.editor.replaceRange('', from, to);
       }
       if (change.mark[1] !== this.canopClient.localId) {
