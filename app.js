@@ -9,11 +9,14 @@ var shared = new canop.Client();
 var coso = camp.ws('text', function (socket) {
   socket.on('message', function (raw) {
     var data = JSON.parse(raw);
-    var change = canop.Operation.fromList(data.D);  // delta.
+    console.log('< ' + raw);
+    var change = canop.Operation.fromProtocol(data);  // delta.
     var canon = shared.receiveSent(change);
+    console.log('> ' + JSON.stringify(canon.toProtocol()));
     coso.clients.forEach(function (client) {
-      client.send(JSON.stringify({D:canon.list}));
+      client.send(JSON.stringify(canon.toProtocol()));
     });
   });
-  socket.send(JSON.stringify({ M: '' + shared, B: shared.base }));
+  socket.send(JSON.stringify([[], [[[shared.base, 0, 0], 0, '' + shared]]]));
+  //socket.send(JSON.stringify({ M: '' + shared, B: shared.base }));
 });

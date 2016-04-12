@@ -13,7 +13,9 @@ function CanopCodemirrorHook(editor, options) {
 
   this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
+  this.remoteUpdate = this.remoteUpdate.bind(this);
 
+  this.canopClient.onUpdate(this.remoteUpdate, {path: [], type: String});
   this.connect(options);
 }
 
@@ -32,19 +34,25 @@ CanopCodemirrorHook.prototype = {
   },
 
   socketReceive: function CCHsocketReceive(event) {
-    var update = JSON.parse(event.data);
-    console.log('< ' + JSON.stringify(update));
-    if (update.M !== undefined) {
-      this.editor.off('change', this.editorChange);
-      this.editor.setValue(update.M);
-      this.canopClient.reset(update.M, update.B);
-      this.editor.on('change', this.editorChange);
-    } else if (update.D !== undefined) {
-      var change = canop.operationFromList(update.D);
-      var minimalDelta = this.merge(change);
-      //this.resetEditor();
-      this.updateEditor(minimalDelta);
-    }
+    console.log('< ' + event.data);
+    this.canopClient.receiveUpdate('' + event.data);
+    //if (update) {
+    //  this.editor.off('change', this.editorChange);
+    //  this.editor.setValue(update.M);
+    //  this.canopClient.reset(update.M, update.B);
+    //  this.editor.on('change', this.editorChange);
+    //} else if (update.D !== undefined) {
+    //  var change = canop.operationFromProtocol(update);
+    //  var minimalDelta = this.merge(change);
+    //  //this.resetEditor();
+    //  this.updateEditor(minimalDelta);
+    //}
+  },
+
+  remoteUpdate: function CCHremoteUpdate(update, prevLocal, prevSent) {
+    var minimalDelta = this.merge(update, prevLocal, prevSent);
+    //this.resetEditor();
+    this.updateEditor(minimalDelta);
   },
 
   editorChange: function CCHeditorChange(editor, change) {
@@ -67,8 +75,8 @@ CanopCodemirrorHook.prototype = {
 
   send: function CCHsend() {
     if (this.canopClient.local.list.length > 0) {
-      console.log('> ' + JSON.stringify({ D: this.canopClient.local.list }));
-      this.socket.send(JSON.stringify({ D: this.canopClient.local.list }));
+      console.log('> ' + JSON.stringify(this.canopClient.local.toProtocol()));
+      this.socket.send(JSON.stringify(this.canopClient.local.toProtocol()));
       this.canopClient.localToSent();
     }
   },
@@ -83,7 +91,7 @@ CanopCodemirrorHook.prototype = {
 
   // Takes a Client and an operation.
   // Returns a list of atomic operations.
-  merge: function CCHmerge(change) {
+  merge: function CCHmerge(change, prevLocal, prevSent) {
     // If all operations were sent from here, ignore them.
     var allFromHere = true;
     for (var i = 0; i < change.list.length; i++) {
@@ -94,23 +102,21 @@ CanopCodemirrorHook.prototype = {
     }
 
     if (allFromHere) {
-      this.canopClient.receiveCanon(change);
       return [];
     } else {
-      var minimalDelta = this.editorUndoChanges();
-      this.canopClient.receiveCanon(change);
+      var minimalDelta = this.editorUndoChanges(prevLocal, prevSent);
       this.editorDoChanges(change, minimalDelta);
       return minimalDelta;
     }
   },
 
-  editorUndoChanges: function CCHeditorUndoChanges() {
+  editorUndoChanges: function CCHeditorUndoChanges(prevLocal, prevSent) {
     var delta = [];
-    for (var i = 0; i < this.canopClient.local.list.length; i++) {
-      delta.push(this.inverseAtomicOperation(this.canopClient.local.list[i]));
+    for (var i = 0; i < prevLocal.list.length; i++) {
+      delta.push(this.inverseAtomicOperation(prevLocal.list[i]));
     }
-    for (var i = 0; i < this.canopClient.sent.list.length; i++) {
-      delta.push(this.inverseAtomicOperation(this.canopClient.sent.list[i]));
+    for (var i = 0; i < prevSent.list.length; i++) {
+      delta.push(this.inverseAtomicOperation(prevSent.list[i]));
     }
     return delta;
   },
@@ -131,8 +137,8 @@ CanopCodemirrorHook.prototype = {
   inverseAtomicOperation: function CCHinverseAtomicOperation(operation) {
     var inverse = operation.dup();
     // Insertions become deletions and vice-versa.
-    inverse.tag = (inverse.tag === canop.TAG.insert)? canop.TAG.delete:
-      canop.TAG.insert;
+    inverse.tag = (inverse.tag === canop.TAG.add)? canop.TAG.remove:
+      canop.TAG.add;
     return inverse;
   },
 
@@ -147,9 +153,11 @@ CanopCodemirrorHook.prototype = {
     var cursor = this.editor.indexFromPos(this.editor.getCursor());
     for (var i = 0; i < delta.length; i++) {
       var change = delta[i];
-      if (change.tag === canop.TAG.insert) {
+      if (change.tag === canop.TAG.set) {
+        this.editor.setValue(change.key);
+      } else if (change.tag === canop.TAG.add) {
         this.editor.replaceRange(change.value, this.editor.posFromIndex(change.key));
-      } else if (change.tag === canop.TAG.delete) {
+      } else if (change.tag === canop.TAG.remove) {
         var from = this.editor.posFromIndex(change.key);
         var to = this.editor.posFromIndex(change.key + change.value.length);
         this.editor.replaceRange('', from, to);
