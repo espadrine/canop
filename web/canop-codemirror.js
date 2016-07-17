@@ -36,23 +36,10 @@ CanopCodemirrorHook.prototype = {
   socketReceive: function CCHsocketReceive(event) {
     console.log('< ' + event.data);
     this.canopClient.receiveUpdate('' + event.data);
-    //if (update) {
-    //  this.editor.off('change', this.editorChange);
-    //  this.editor.setValue(update.M);
-    //  this.canopClient.reset(update.M, update.B);
-    //  this.editor.on('change', this.editorChange);
-    //} else if (update.D !== undefined) {
-    //  var change = canop.operationFromProtocol(update);
-    //  var minimalDelta = this.merge(change);
-    //  //this.resetEditor();
-    //  this.updateEditor(minimalDelta);
-    //}
   },
 
-  remoteUpdate: function CCHremoteUpdate(update, prevLocal, prevSent) {
-    var minimalDelta = this.merge(update, prevLocal, prevSent);
-    //this.resetEditor();
-    this.updateEditor(minimalDelta);
+  remoteUpdate: function CCHremoteUpdate(update, posChanges) {
+    this.updateEditor(update.list, posChanges);
   },
 
   editorChange: function CCHeditorChange(editor, change) {
@@ -76,6 +63,8 @@ CanopCodemirrorHook.prototype = {
   send: function CCHsend() {
     if (this.canopClient.local.list.length > 0) {
       console.log('> ' + JSON.stringify(this.canopClient.local.toProtocol()));
+      //var data = JSON.stringify(this.canopClient.local.toProtocol());
+      //setTimeout(() => this.socket.send(data),2000)
       this.socket.send(JSON.stringify(this.canopClient.local.toProtocol()));
       this.canopClient.localToSent();
     }
@@ -89,68 +78,16 @@ CanopCodemirrorHook.prototype = {
     this.editor.on('change', this.editorChange);
   },
 
-  // Takes a Client and an operation.
-  // Returns a list of atomic operations.
-  merge: function CCHmerge(change, prevLocal, prevSent) {
-    // If all operations were sent from here, ignore them.
-    var allFromHere = true;
-    for (var i = 0; i < change.list.length; i++) {
-      if (change.list[i].mark[1] !== this.canopClient.localId) {
-        allFromHere = false;
-        break;
-      }
-    }
-
-    if (allFromHere) {
-      return [];
-    } else {
-      var minimalDelta = this.editorUndoChanges(prevLocal, prevSent);
-      this.editorDoChanges(change, minimalDelta);
-      return minimalDelta;
-    }
-  },
-
-  editorUndoChanges: function CCHeditorUndoChanges(prevLocal, prevSent) {
-    var delta = [];
-    for (var i = 0; i < prevLocal.list.length; i++) {
-      delta.push(this.inverseAtomicOperation(prevLocal.list[i]));
-    }
-    for (var i = 0; i < prevSent.list.length; i++) {
-      delta.push(this.inverseAtomicOperation(prevSent.list[i]));
-    }
-    return delta;
-  },
-
-  editorDoChanges: function CCHeditorDoChanges(op, delta) {
-    for (var i = 0; i < op.list.length; i++) {
-      delta.push(op.list[i]);
-    }
-    for (var i = 0; i < this.canopClient.sent.list.length; i++) {
-      delta.push(this.canopClient.sent.list[i]);
-    }
-    for (var i = 0; i < this.canopClient.local.list.length; i++) {
-      delta.push(this.canopClient.local.list[i]);
-    }
-    return delta;
-  },
-
-  inverseAtomicOperation: function CCHinverseAtomicOperation(operation) {
-    var inverse = operation.dup();
-    // Insertions become deletions and vice-versa.
-    inverse.tag = (inverse.tag === canop.TAG.add)? canop.TAG.remove:
-      canop.TAG.add;
-    return inverse;
-  },
-
-  // Takes a list of atomic operations.
-  updateEditor: function CCHupdateEditor(delta) {
+  // Takes a list of AtomicOperations and a list of PosChanges.
+  updateEditor: function CCHupdateEditor(delta, posChanges) {
     this.editor.off('change', this.editorChange);
+    var cursor = this.editor.indexFromPos(this.editor.getCursor());
     this.applyDelta(delta);
+    this.updateCursor(posChanges, cursor);
     this.editor.on('change', this.editorChange);
   },
 
   applyDelta: function CCHapplyDelta(delta) {
-    var cursor = this.editor.indexFromPos(this.editor.getCursor());
     for (var i = 0; i < delta.length; i++) {
       var change = delta[i];
       if (change.tag === canop.TAG.set) {
@@ -162,10 +99,11 @@ CanopCodemirrorHook.prototype = {
         var to = this.editor.posFromIndex(change.key + change.value.length);
         this.editor.replaceRange('', from, to);
       }
-      if (change.mark[1] !== this.canopClient.localId) {
-        cursor = canop.modifyOffset(cursor, change);
-      }
     }
+  },
+
+  updateCursor: function CCHupdateCursor(posChanges, oldCursor) {
+    cursor = canop.changeKey(oldCursor, posChanges, true);
     this.editor.setCursor(this.editor.posFromIndex(cursor));
   }
 };
