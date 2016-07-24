@@ -73,7 +73,7 @@ star.clients[1].insert(4, 'cd');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'abcde', 'Deletion, then insertion in the deletion');
+assert.equal(result, 'abe', 'Deletion, then insertion in the deletion');
 
 var star = new Star('abxye');
 star.clients[0].insert(4, 'cd');
@@ -81,7 +81,7 @@ star.clients[1].delete(2, 'xye');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'abcde', 'Insertion, then deletion over the insertion');
+assert.equal(result, 'ab', 'Insertion, then deletion over the insertion');
 
 var star = new Star('abxyzc');
 star.clients[0].delete(2, 'xy');
@@ -89,7 +89,7 @@ star.clients[1].delete(3, 'yz');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'abc', 'Deletion, then deletion starting in the deletion');
+assert.equal(result, 'abzc', 'Deletion, then deletion starting in the deletion');
 
 var star = new Star('abxyzc');
 star.clients[0].delete(3, 'yz');
@@ -97,7 +97,7 @@ star.clients[1].delete(2, 'xy');
 sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
-assert.equal(result, 'abc', 'Deletion, then deletion wherein the other deletion starts');
+assert.equal(result, 'abxc', 'Deletion, then deletion wherein the other deletion starts');
 
 var star = new Star('abxyzc');
 star.clients[0].delete(1, 'bxyz');

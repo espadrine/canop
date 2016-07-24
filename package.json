@@ -1,0 +1,29 @@
+{
+  "name": "canop",
+  "version": "0.1.0",
+  "description": "Convergent algorithm for collaborative text.",
+  "main": "canop.js",
+  "scripts": {
+    "test": "node test/canop.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:espadrine/canop.git"
+  },
+  "keywords": [
+    "json",
+    "synchronization",
+    "consistency",
+    "collaborative",
+    "websocket",
+    "operational-transformation",
+    "ot",
+    "codemirror"
+  ],
+  "author": "Thaddee Tyl <thaddee.tyl@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/espadrine/canop/issues"
+  },
+  "homepage": "https://github.com/espadrine/canop"
+}
