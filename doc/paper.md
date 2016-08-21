@@ -119,7 +119,7 @@ mark system, a list ordering with number items:
   operations registered locally.
 - the *machine* is a unique identifier shared by all local operations on each
   client. It is preferably assigned to clients by the server.
-- the *nounce* is an ever-incrementing integer which forces each local atomic
+- the *opid* is an ever-incrementing integer which forces each local atomic
   operation to be unique.
 
 Upon receiving sent operations from a client, the server:
