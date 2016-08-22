@@ -35,6 +35,16 @@ transformation is trivial.
 
 Proof left for the reader. Hint: `o1' = o2` and `o2' = o1`.
 
+Trivially, if operations are a subset of a set of atomic operations, and if the
+application simply merges the atomic operations of both operations, then the
+application is commutative.
+
+In practice, having atomic operations be ordered in an operation is necessary
+for complex states, as they map well to the sequential nature of algorithms and
+processors. Associating a total ordering over the set of atomic operations and
+sorting the atomic operations in an operation ensures that application remains
+commutative.
+
 
 # Strings as an example
 
@@ -82,16 +92,30 @@ inserted in the list of smaller mark after the last element whose offset is
 smaller than the offset of the element.
 
 By the definition of the mark, we can prove that the application is commutative.
-Hence, this operational group converges.  In fact, it is also associative, and
+Hence, this operational group converges. In fact, it is also associative, and
 each operation has an inverse (or otherwise put, insertion and deletion are both
 reversible). As a result, this operational group is an Abelian group.
+
+It is trivial to extend this design to all of JSON. Additionally, by making the
+mark be a [Lamport timestamp][] built from a list (operation id, machine), with
+the machine a random 128-bit number, we obtain a peer-to-peer, distributed
+synchronization system for arbitrarily rich data, by making each node that
+creates an operation broadcast it to all other nodes. We can choose to have it
+either be *sequentially consistent* (by locally updating the data immediately)
+or *strongly consistent* (by waiting for all nodes to confirm reception of an
+operation before the write operation ends).
+
+One can even add an atomic counter to the mark to support user-specified atomic
+compound operations.
+
+[Lamport timestamp]: http://research.microsoft.com/en-us/um/people/lamport/pubs/time-clocks.pdf
 
 
 # Transformation
 
-The algorithm seen above, while ensuring eventual convergence, would not be
-fitting for regular simultaneous editing. Indeed, a text "bc" where the
-following sequence of operations is applied by two entities A and B:
+The algorithm seen above, while ensuring convergence, would not be fitting for
+regular simultaneous editing. Indeed, a text "bc" where the following sequence
+of operations is applied by two entities A and B:
 
 1. A inserts "d" at the end (offset 2), timestamp 1
 2. B inserts "a" at the beginning (offset 0), timestamp 2
@@ -160,6 +184,31 @@ assuming we rely on TCP, since all canon operations will be received in order.
 The above operational transformation is the simplest that can be devised to fix
 the problem we pointed out; however, we can make it arbitrarily complex to cover
 more specific issues.
+
+
+# Intention preservation
+
+In particular, it won't preserve intentions when merging long strings of atomic
+operations. In order to fix that, each operation gets its indices mapped by
+operations that are causally connected to it, and it jumps over each operation
+that modified it, until it reaches the head of the canon.
+
+For y:
+
+    ─┬──→ a ─→ x'  (canon)
+     └─── x ←─ y  (sent)
+
+    ─┬──→ a ─→ x'
+     └─── y' ←─ x ←─ y
+
+    ─┬──→ a ─→ y'' ─→ x'
+     └─── x ←─ y
+
+    ─┬──→ a ─→ x' ─→ y'''  ← now, y is rebased.
+     └─── x ←─ y
+
+This is much more accurate than the previous index modification system, which
+relied on approximations and completely disregarded causal relationships.
 
 
 ---- Copyright Thaddée Tyl.
