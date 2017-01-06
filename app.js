@@ -4,6 +4,7 @@ var camp = require('camp').start({ port: +process.argv[2] || 1234 });
 var canop = require('./canop');
 
 var shared = new canop.Client();
+var c = 1;
 
 // coso: Collaborative socket.
 var coso = camp.ws('text', function (socket) {
@@ -17,6 +18,11 @@ var coso = camp.ws('text', function (socket) {
       client.send(JSON.stringify(canon.toProtocol()));
     });
   });
-  socket.send(JSON.stringify([[], [[[shared.base, 0, 0], 0, '' + shared]]]));
+  socket.send(JSON.stringify([[], [[[shared.base, 0, 0], 0, '' + shared]], c++]));
   //socket.send(JSON.stringify({ M: '' + shared, B: shared.base }));
+});
+
+process.on('SIGINT', function() {
+  console.log('→ ' + shared);
+  process.exit();
 });
