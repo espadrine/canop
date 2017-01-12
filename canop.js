@@ -10,7 +10,7 @@
 var exports = {};
 
 // Tags indicate the nature of an atomic operation.
-var tag = {
+var actions = {
   set: 0,
   add: 1,
   remove: 2,
@@ -25,10 +25,10 @@ var tag = {
 var MAX_INT = 0x1fffffffffffff;
 
 var opid = 0;
-function AtomicOperation(tag, key, value, base, machine) {
+function AtomicOperation(action, key, value, base, machine) {
   // Unique identifier for this operation. List of numbers.
   this.mark = [+base, +machine, opid++];
-  this.tag = tag;
+  this.action = action;
   this.key = key;
   this.value = value;
   this.original = null;
@@ -39,10 +39,10 @@ AtomicOperation.prototype = {
     return AtomicOperation.fromObject(this);
   },
   change: function change() {
-    if (this.tag === tag.add) {
+    if (this.action === actions.add) {
       return new PosChange(this.key, this.key + this.value.length,
           this.value.length, this.original? this.original.key: null);
-    } else if (this.tag === tag.remove) {
+    } else if (this.action === actions.remove) {
       return new PosChange(this.key, this.key + this.value.length,
           -this.value.length, this.original? this.original.key: null);
     }
@@ -52,7 +52,7 @@ AtomicOperation.prototype = {
     var oldEnd = this.key + this.value.length;
     this.original = {
       mark: this.mark.slice(),
-      tag: this.tag,
+      action: this.action,
       key: this.key,
       value: this.value,
     };
@@ -60,9 +60,9 @@ AtomicOperation.prototype = {
     var key = changeKey(this.key, changes);
     // If we are adding, the end of the change has no context before the
     // insertion.
-    if (this.tag === tag.add) {
+    if (this.action === actions.add) {
       var end = key + this.value.length;
-    } else if (this.tag === tag.remove) {
+    } else if (this.action === actions.remove) {
       var end = changeKey(oldEnd, changes);
     }
     if (key === undefined || end === undefined) {
@@ -83,17 +83,17 @@ AtomicOperation.prototype = {
   },
   // Return an inverse of this operation, or undefined if it cannot be inversed.
   inverse: function inverse() {
-    if (this.tag === tag.add) {
+    if (this.action === actions.add) {
       var op = this.dup();
-      op.tag = tag.remove;
-    } else if (this.tag === tag.remove) {
+      op.action = actions.remove;
+    } else if (this.action === actions.remove) {
       var op = this.dup();
-      op.tag = tag.add;
+      op.action = actions.add;
     }
     return op;
   },
   toProtocol: function toProtocol() {
-    return [this.mark, this.tag, this.key, this.value];
+    return [this.mark, this.action, this.key, this.value];
   },
 };
 
@@ -176,13 +176,13 @@ var changeKey = function changeKey(key, changes, bestGuess) {
 }
 
 AtomicOperation.fromObject = function (data) {
-  var ao = new AtomicOperation(data.tag, data.key, data.value, data.mark[0]);
+  var ao = new AtomicOperation(data.action, data.key, data.value, data.mark[0]);
   opid--;  // Compensate opid increment.
   ao.mark = data.mark.slice();
   if (data.original != null) {
     ao.original = {
       mark: data.original.mark.slice(),
-      tag: data.original.tag,
+      action: data.original.action,
       key: data.original.key,
       value: data.original.value,
     };
@@ -192,10 +192,10 @@ AtomicOperation.fromObject = function (data) {
 
 AtomicOperation.fromProtocol = function (delta) {
   var mark = delta[0];
-  var tag = delta[1];
+  var action = delta[1];
   var key = delta[2];
   var value = delta[3];
-  var ao = new AtomicOperation(tag, key, value, mark[0]);
+  var ao = new AtomicOperation(action, key, value, mark[0]);
   opid--;  // Compensate opid increment.
   ao.mark = mark.slice();
   return ao;
@@ -277,13 +277,13 @@ Operation.prototype = {
   },
   // Insert a value to the operation. Mutates this.
   insert: function insertOp(offset, value, base, local) {
-    var aop = new AtomicOperation(tag.add, offset, value, base, local);
+    var aop = new AtomicOperation(actions.add, offset, value, base, local);
     this.list.push(aop);
     return this;
   },
   // Delete a value to the operation. Mutates this.
   delete: function deleteOp(offset, value, base, local) {
-    var aop = new AtomicOperation(tag.remove, offset, value, base, local);
+    var aop = new AtomicOperation(actions.remove, offset, value, base, local);
     this.list.push(aop);
     return this;
   },
@@ -292,14 +292,14 @@ Operation.prototype = {
     var s = '';
     for (var i = 0; i < this.list.length; i++) {
       var op = this.list[i];
-      if (op.tag === tag.add) {
+      if (op.action === actions.add) {
         // padding
         var padding = op.key - s.length;
         for (var j = 0; j < padding; j++) {
           s += ' ';
         }
         s = s.slice(0, op.key) + op.value + s.slice(op.key);
-      } else if (op.tag === tag.remove) {
+      } else if (op.action === actions.remove) {
         if (s.slice(op.key, op.key + op.value.length)
             !== op.value) {
           // The intention was not preserved. It's ok, just sad.
@@ -311,7 +311,7 @@ Operation.prototype = {
         }
         s = s.slice(0, op.key) +
           s.slice(op.key + op.value.length);
-      } else if (op.tag === tag.set) {
+      } else if (op.action === actions.set) {
         s = op.key;
       }
     }
@@ -525,7 +525,7 @@ Client.prototype = {
     var ownSent = ownSent.map(function(c) {
       var ao = c.dup();
       if (c.original != null) {
-        ao.tag = c.original.tag;
+        ao.action = c.original.action;
         ao.key = c.original.key;
         ao.value = c.original.value;
       }
@@ -568,7 +568,7 @@ Client.prototype = {
 };
 
 exports.operationFromProtocol = Operation.fromProtocol;
-exports.TAG = tag;
+exports.action = actions;
 exports.changeKey = changeKey;
 
 return exports;
