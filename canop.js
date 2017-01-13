@@ -116,18 +116,18 @@ PosChange.prototype = {
   },
   // Change the key. Returns undefined if the key is removed.
   update: function update(key, originalKey) {
-    if (key >= this.highKey) {
+    if (this.highKey <= key) {
       return key + this.change;
-    } else if (key >= this.lowKey) {
+    } else if (this.lowKey <= key) {
       if (this.change >= 0) {
-        if (key > this.lowKey) {
+        if (this.lowKey < key) {
           return key + this.change;
         }
         // If there are two insertions at the same spot, keep original order.
-        if (this.originalLowKey <= originalKey) {
+        if (this.originalLowKey < originalKey) {
           return key + this.change;
         } else { return key; }
-      } else if (key > this.lowKey) { return;  // Removal of context.
+      } else if (this.lowKey < key) { return;  // Removal of context.
       } else { return key; }
     } else { return key; }
   },

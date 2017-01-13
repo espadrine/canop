@@ -106,3 +106,11 @@ sendChange(star, 0);
 sendChange(star, 1);
 var result = '' + star.canon;
 assert.equal(result, 'ac', 'Deletion, then deletion embedded in it');
+
+var star = new Star('');
+star.clients[0].insert(0, 'a');
+star.clients[0].insert(1, 's');
+star.clients[0].delete(1, 's');
+sendChange(star, 0);
+var result = '' + star.canon;
+assert.equal(result, 'a', 'Inserting a character immediately deleted');
