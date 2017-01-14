@@ -36,6 +36,7 @@ CanopCodemirrorHook.prototype = {
   socketReceive: function CCHsocketReceive(event) {
     console.log('< ' + event.data);
     this.canopClient.receiveUpdate('' + event.data);
+    this.send();
   },
 
   remoteUpdate: function CCHremoteUpdate(update, posChanges) {
@@ -61,6 +62,8 @@ CanopCodemirrorHook.prototype = {
   },
 
   send: function CCHsend() {
+    // Don't send more operations when there are non-canonized operations.
+    if (this.canopClient.sent.list.length > 0) { return; }
     if (this.canopClient.local.list.length > 0) {
       console.log('> ' + JSON.stringify(this.canopClient.local.toProtocol()));
       //var data = JSON.stringify(this.canopClient.local.toProtocol());
@@ -90,11 +93,11 @@ CanopCodemirrorHook.prototype = {
   applyDelta: function CCHapplyDelta(delta) {
     for (var i = 0; i < delta.length; i++) {
       var change = delta[i];
-      if (change.tag === canop.TAG.set) {
+      if (change.action === canop.action.set) {
         this.editor.setValue(change.key);
-      } else if (change.tag === canop.TAG.add) {
+      } else if (change.action === canop.action.add) {
         this.editor.replaceRange(change.value, this.editor.posFromIndex(change.key));
-      } else if (change.tag === canop.TAG.remove) {
+      } else if (change.action === canop.action.remove) {
         var from = this.editor.posFromIndex(change.key);
         var to = this.editor.posFromIndex(change.key + change.value.length);
         this.editor.replaceRange('', from, to);
