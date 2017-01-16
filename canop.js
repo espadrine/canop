@@ -93,7 +93,8 @@ AtomicOperation.prototype = {
     return op;
   },
   toProtocol: function toProtocol() {
-    return [this.mark, this.action, this.key, this.value];
+    // TODO: right now we only support strings (4). Support JSON.
+    return [this.mark, [4, this.action, this.key, this.value]];
   },
 };
 
@@ -192,9 +193,10 @@ AtomicOperation.fromObject = function (data) {
 
 AtomicOperation.fromProtocol = function (delta) {
   var mark = delta[0];
-  var action = delta[1];
-  var key = delta[2];
-  var value = delta[3];
+  var type = delta[1][0];  // TODO: validate type upon applying.
+  var action = delta[1][1];
+  var key = delta[1][2];
+  var value = delta[1][3];
   var ao = new AtomicOperation(action, key, value, mark[0]);
   opid--;  // Compensate opid increment.
   ao.mark = mark.slice();
@@ -208,9 +210,9 @@ function Operation(ops) {
 exports.Operation = Operation;
 
 Operation.fromProtocol = function (data) {
-  // data: [path, deltas, machine]
+  // data: [2, path, deltas]
   var op = new Operation();
-  var deltas = data[1];
+  var deltas = data[2];
   for (var i = 0; i < deltas.length; i++) {
     op.list.push(AtomicOperation.fromProtocol(deltas[i]));
   }
@@ -323,7 +325,8 @@ Operation.prototype = {
       var op = this.list[i];
       deltas.push(op.toProtocol());
     }
-    return [[], deltas];
+    // TODO: right now we only support root objects ([]).
+    return [2, [], deltas];
   }
 };
 
@@ -375,15 +378,28 @@ Client.prototype = {
   onUpdate: function(listener, options) {
     this.listeners.push({listener: listener, options: options});
   },
+  // Protocol client-side reception.
+  clientReceive: function(protocol) {
+    if (typeof protocol === 'string') {
+      protocol = JSON.parse(protocol);
+    }
+    // FIXME: validate that the update conforms to the protocol.
+    var messageType = protocol[0];
+    if (messageType === 1) {  // Raw data.
+      var machine = protocol[1];
+      var json = protocol[2];
+      var base = protocol[3];
+      this.localId = machine;
+      this.receiveUpdate([1, [], [[[base, machine, 0], [63, 0, json]]]]);
+    } else if (messageType === 2) {  // Diff.
+      this.receiveUpdate(protocol);
+    }
+  },
   // Receive an update conforming to the protocol, as a String.
   // Return a list of AtomicOperations.
-  receiveUpdate: function(updateString) {
-    // FIXME: validate that the update conforms to the protocol.
-    var update = JSON.parse(updateString);
-    var path = update[0];
-    var deltas = update[1];
-    var machine = update[2];
-    if (machine !== undefined) { this.localId = machine; }
+  receiveUpdate: function(update) {
+    var path = update[1];
+    var deltas = update[2];
     var canon = Operation.fromProtocol(update);
     // Changes to perform locally.
     var changes = this.local.inverse().list

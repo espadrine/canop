@@ -35,7 +35,7 @@ CanopCodemirrorHook.prototype = {
 
   socketReceive: function CCHsocketReceive(event) {
     console.log('< ' + event.data);
-    this.canopClient.receiveUpdate('' + event.data);
+    this.canopClient.clientReceive('' + event.data);
     this.send();
   },
 

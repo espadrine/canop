@@ -18,8 +18,7 @@ var coso = camp.ws('text', function (socket) {
       client.send(JSON.stringify(canon.toProtocol()));
     });
   });
-  socket.send(JSON.stringify([[], [[[shared.base, 0, 0], 0, '' + shared]], c++]));
-  //socket.send(JSON.stringify({ M: '' + shared, B: shared.base }));
+  socket.send(JSON.stringify([1, c++, '' + shared, shared.base]));
 });
 
 process.on('SIGINT', function() {
