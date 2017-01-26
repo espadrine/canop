@@ -10,10 +10,8 @@ General form:
 
 ```js
 [2, path, deltas]
-// with delta being one of:
-[mark, [type, action]]
-[mark, [type, action, key]]
-[mark, [type, action, key, value]]
+// delta:
+[mark, [action, parameters…]]
 ```
 
 - `path`: a list of keys, either strings (for objects) or numbers (for arrays).
@@ -26,38 +24,34 @@ General form:
 
 Delta for any value:
 
-- 63 (selects all types).
 - `action`: set = 0
 - `key`: any JSON value, possibly of a different type.
 - `value`: old value, if any.
 
-(Note: `[0,0]` "set no type to nothing" is the empty operation.)
-
-Delta for strings:
-
-- 4 (ensures that this is a string operation).
-- `action`: action, an integer (add = 1, remove = 2).
-- `key`: offset (in the string).
-- `value`: string.
-
-Delta for lists:
-
-- 2 (ensures that this is a list operation).
-- `action`: action, an integer (add = 1, remove = 2, move = 3).
-- `key`: index (in the list).
-- `value`: value (for move, path of the new location).
+(Note: `[0]` "set nothing to nothing" is the empty operation.)
 
 Delta for objects:
 
-- 1 (ensures that this is an object operation).
-- `action`: action, an integer (add = 1, remove = 2, move = 3).
+- `action`: add = 1, remove = 2, move = 3.
 - `key`: key (in the object) as a string.
 - `value`: value (for move, path of the new location).
 
-Delta for numbers: [8 (number), 1, number] representing an addition,
-2 to multiply, 3 for max, 4 for min.
+Delta for lists:
 
-Delta for booleans: [16 (boolean), 1] to set, 2 to reset, 3 to toggle.
+- `action`: add = 4, remove = 5, move = 6.
+- `key`: index (in the list).
+- `value`: value (for move, path of the new location).
+
+Delta for strings:
+
+- `action`: add = 7, remove = 8.
+- `key`: offset (in the string).
+- `value`: string.
+
+Delta for numbers: [10, number] representing an addition,
+11 to multiply, 12 for max, 13 for min.
+
+Delta for booleans: [20] to set, 21 to reset, 22 to toggle.
 
 ## Handshake
 
