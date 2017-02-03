@@ -7,15 +7,23 @@ function CanopCodemirrorHook(editor, options) {
   options.channelName = options.channelName || 'text';
 
   this.editor = editor;
-  this.canopClient = new canop.Client();
+  var self = this;
+  this.canopClient = new canop.Client({
+    send: function(msg) {
+      if (self.socket === undefined) {
+        throw new Error('Socket not initialized but data is sent through it');
+      }
+      self.socket.send(msg);
+    },
+  });
   this.channelName = options.channelName;
   this.socket = null;
 
   this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
-  this.remoteUpdate = this.remoteUpdate.bind(this);
+  this.remoteChange = this.remoteChange.bind(this);
 
-  this.canopClient.onUpdate(this.remoteUpdate, {path: [], type: String});
+  this.canopClient.onChange(this.remoteChange, {path: []});
   this.connect(options);
 }
 
@@ -35,12 +43,11 @@ CanopCodemirrorHook.prototype = {
 
   socketReceive: function CCHsocketReceive(event) {
     console.log('< ' + event.data);
-    this.canopClient.clientReceive('' + event.data);
-    this.send();
+    this.canopClient.receive('' + event.data);
   },
 
-  remoteUpdate: function CCHremoteUpdate(update, posChanges) {
-    this.updateEditor(update.list, posChanges);
+  remoteChange: function CCHremoteUpdate(change, posChanges) {
+    this.updateEditor(change, posChanges);
   },
 
   editorChange: function CCHeditorChange(editor, change) {
@@ -49,27 +56,13 @@ CanopCodemirrorHook.prototype = {
     var text = change.text.join('\n');
     var removed = change.removed.join('\n');
     if (removed.length > 0) {
-      this.canopClient.delete(editor.indexFromPos(from), removed);
+      this.canopClient.remove([], editor.indexFromPos(from), removed);
     }
     if (text.length > 0) {
-      this.canopClient.insert(editor.indexFromPos(from), text);
+      this.canopClient.add([], editor.indexFromPos(from), text);
     }
     if (change.next) {
       this.editorChange(editor, change.next);
-    } else {
-      this.send();
-    }
-  },
-
-  send: function CCHsend() {
-    // Don't send more operations when there are non-canonized operations.
-    if (this.canopClient.sent.list.length > 0) { return; }
-    if (this.canopClient.local.list.length > 0) {
-      console.log('> ' + JSON.stringify(this.canopClient.local.toProtocol()));
-      //var data = JSON.stringify(this.canopClient.local.toProtocol());
-      //setTimeout(() => this.socket.send(data),2000)
-      this.socket.send(JSON.stringify(this.canopClient.local.toProtocol()));
-      this.canopClient.localToSent();
     }
   },
 
@@ -93,13 +86,13 @@ CanopCodemirrorHook.prototype = {
   applyDelta: function CCHapplyDelta(delta) {
     for (var i = 0; i < delta.length; i++) {
       var change = delta[i];
-      if (change.action === canop.action.set) {
-        this.editor.setValue(change.key);
-      } else if (change.action === canop.action.add) {
-        this.editor.replaceRange(change.value, this.editor.posFromIndex(change.key));
-      } else if (change.action === canop.action.remove) {
-        var from = this.editor.posFromIndex(change.key);
-        var to = this.editor.posFromIndex(change.key + change.value.length);
+      if (change[1] === canop.action.set) {
+        this.editor.setValue(change[2]);
+      } else if (change[1] === canop.action.stringAdd) {
+        this.editor.replaceRange(change[3], this.editor.posFromIndex(change[2]));
+      } else if (change[1] === canop.action.stringRemove) {
+        var from = this.editor.posFromIndex(change[2]);
+        var to = this.editor.posFromIndex(change[2] + change[3].length);
         this.editor.replaceRange('', from, to);
       }
     }

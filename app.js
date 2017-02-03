@@ -3,22 +3,24 @@
 var camp = require('camp').start({ port: +process.argv[2] || 1234 });
 var canop = require('./canop');
 
-var shared = new canop.Client();
+var shared = new canop.Server({ data: '' });
 var c = 1;
 
-// coso: Collaborative socket.
-var coso = camp.ws('text', function (socket) {
-  socket.on('message', function (raw) {
-    var data = JSON.parse(raw);
-    console.log('< ' + raw);
-    var change = canop.Operation.fromProtocol(data);  // delta.
-    var canon = shared.receiveSent(change);
-    console.log('> ' + JSON.stringify(canon.toProtocol()));
-    coso.clients.forEach(function (client) {
-      client.send(JSON.stringify(canon.toProtocol()));
-    });
-  });
-  socket.send(JSON.stringify([1, c++, '' + shared, shared.base]));
+camp.ws('text', function(socket) {
+  var client = {
+    send: function(msg) {
+      console.log(client.id + '> ' + msg);
+      socket.send(msg);
+    },
+    onReceive: function(receive) {
+      socket.on('message', function(msg) {
+        console.log('<< ' + msg);
+        receive(msg);
+      });
+    },
+  };
+  shared.addClient(client);
+  socket.on('close', function() { shared.removeClient(client); });
 });
 
 process.on('SIGINT', function() {

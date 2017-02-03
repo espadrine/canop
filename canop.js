@@ -12,13 +12,8 @@ var exports = {};
 // Tags indicate the nature of an atomic operation.
 var actions = {
   set: 0,
-  add: 1,
-  remove: 2,
-  move: 3,
-  multiply: 2,
-  toggle: 1,
-  on: 2,
-  off: 3
+  stringAdd: 7,
+  stringRemove: 8
 };
 
 // The last incrementable integer in IEEE754.
@@ -39,10 +34,10 @@ AtomicOperation.prototype = {
     return AtomicOperation.fromObject(this);
   },
   change: function change() {
-    if (this.action === actions.add) {
+    if (this.action === actions.stringAdd) {
       return new PosChange(this.key, this.key + this.value.length,
           this.value.length, this.original? this.original.key: null);
-    } else if (this.action === actions.remove) {
+    } else if (this.action === actions.stringRemove) {
       return new PosChange(this.key, this.key + this.value.length,
           -this.value.length, this.original? this.original.key: null);
     }
@@ -60,9 +55,9 @@ AtomicOperation.prototype = {
     var key = changeKey(this.key, changes);
     // If we are adding, the end of the change has no context before the
     // insertion.
-    if (this.action === actions.add) {
+    if (this.action === actions.stringAdd) {
       var end = key + this.value.length;
-    } else if (this.action === actions.remove) {
+    } else if (this.action === actions.stringRemove) {
       var end = changeKey(oldEnd, changes);
     }
     if (key === undefined || end === undefined) {
@@ -83,12 +78,12 @@ AtomicOperation.prototype = {
   },
   // Return an inverse of this operation, or undefined if it cannot be inversed.
   inverse: function inverse() {
-    if (this.action === actions.add) {
+    if (this.action === actions.stringAdd) {
       var op = this.dup();
-      op.action = actions.remove;
-    } else if (this.action === actions.remove) {
+      op.action = actions.stringRemove;
+    } else if (this.action === actions.stringRemove) {
       var op = this.dup();
-      op.action = actions.add;
+      op.action = actions.stringAdd;
     }
     return op;
   },
@@ -278,14 +273,14 @@ Operation.prototype = {
     return posChanges;
   },
   // Insert a value to the operation. Mutates this.
-  insert: function insertOp(offset, value, base, local) {
-    var aop = new AtomicOperation(actions.add, offset, value, base, local);
+  add: function addOp(path, offset, value, base, local) {
+    var aop = new AtomicOperation(actions.stringAdd, offset, value, base, local);
     this.list.push(aop);
     return this;
   },
   // Delete a value to the operation. Mutates this.
-  delete: function deleteOp(offset, value, base, local) {
-    var aop = new AtomicOperation(actions.remove, offset, value, base, local);
+  remove: function removeOp(path, offset, value, base, local) {
+    var aop = new AtomicOperation(actions.stringRemove, offset, value, base, local);
     this.list.push(aop);
     return this;
   },
@@ -294,14 +289,14 @@ Operation.prototype = {
     var s = '';
     for (var i = 0; i < this.list.length; i++) {
       var op = this.list[i];
-      if (op.action === actions.add) {
+      if (op.action === actions.stringAdd) {
         // padding
         var padding = op.key - s.length;
         for (var j = 0; j < padding; j++) {
           s += ' ';
         }
         s = s.slice(0, op.key) + op.value + s.slice(op.key);
-      } else if (op.action === actions.remove) {
+      } else if (op.action === actions.stringRemove) {
         if (s.slice(op.key, op.key + op.value.length)
             !== op.value) {
           // The intention was not preserved. It's ok, just sad.
@@ -358,8 +353,14 @@ function equalMark(mark1, mark2) {
   return true;
 }
 
-function Client(base) {
-  this.base = base || 0;  // canon index; 0 means no root.
+// params: an object
+// - data: content of the root canonical operation.
+// - base: integer identifying the root canonical operation.
+// - send: function(String); for clients, function that will be called to
+//   transmit protocol information to the server. It abstracts the method by
+//   which data is exchanged.
+function Client(params) {
+  this.base = params.base || 0;  // canon index; 0 means no root.
   this.local = new Operation();
   this.sent = new Operation();
   this.canon = new Operation();
@@ -369,17 +370,67 @@ function Client(base) {
   // Tailor expansion
   // function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
   this.localId = Math.floor(Math.random() * MAX_INT);
-  this.listeners = [];  // Array of {listener: function(Operation), options}.
+  this.changeListeners = [];  // Array of {listener: function(Operation), options}.
+  this.updateListeners = [];  // Array of {listener: function(Operation), options}.
+
+  if (params.data !== undefined) {
+    this.canon.add([], 0, params.data, this.base, this.localId);
+  }
+  this.send = params.send || function() {};
+  this.nextClientId = 1;
+  this.clients = {};
 }
 exports.Client = Client;
+exports.Server = Client;
+
 Client.prototype = {
-  // Listen to incoming updates (provided by receiveUpdate()).
-  // listener: function(Operation), options: {path: [], type: String / null}.
-  onUpdate: function(listener, options) {
-    this.listeners.push({listener: listener, options: options});
+  // As a server.
+
+  // client: an object with the following fields
+  // - send: function(message)
+  // - onReceive: function(receive: function(message))
+  addClient: function(client) {
+    var self = this;
+    client.id = self.nextClientId;
+    self.nextClientId++;
+    self.clients[client.id] = client;
+
+    client.onReceive(function receiveFromClient(message) {
+      var data = JSON.parse(message);
+      var change = Operation.fromProtocol(data);  // delta.
+      var canon = self.receiveSent(change);
+      var message = JSON.stringify(canon.toProtocol());
+      for (var clientId in self.clients) {
+        var client = self.clients[clientId];
+        client.send(message);
+      }
+    });
+
+    // Send welcome message to new client.
+    client.send(JSON.stringify([1, client.id, self.toString(), self.base]));
   },
-  // Protocol client-side reception.
-  clientReceive: function(protocol) {
+
+  removeClient: function(client) {
+    delete this.clients[client.id];
+  },
+
+  // As a client.
+
+  // Listen to incoming changes (provided by receiveChange()).
+  // listener: function(Operation), options: {path: [], type: String / null}.
+  onChange: function(listener, options) {
+    this.changeListeners.push({listener: listener, options: options});
+  },
+
+  // As a client.
+  // Listen to incoming updates (yielding the corresponding data.).
+  // listener: function(Object), options: {path: [], type: String / null}.
+  onUpdate: function(listener, options) {
+    this.updateListeners.push({listener: listener, options: options});
+  },
+
+  // Client-side protocol reception.
+  receive: function(protocol) {
     if (typeof protocol === 'string') {
       protocol = JSON.parse(protocol);
     }
@@ -390,14 +441,15 @@ Client.prototype = {
       var json = protocol[2];
       var base = protocol[3];
       this.localId = machine;
-      this.receiveUpdate([1, [], [[[base, machine, 0], [63, 0, json]]]]);
+      this.receiveChange([1, [], [[[base, machine, 0], [63, 0, json]]]]);
     } else if (messageType === 2) {  // Diff.
-      this.receiveUpdate(protocol);
+      this.receiveChange(protocol);
     }
+    this.sendToServer();
   },
   // Receive an update conforming to the protocol, as a String.
   // Return a list of AtomicOperations.
-  receiveUpdate: function(update) {
+  receiveChange: function(update) {
     var path = update[1];
     var deltas = update[2];
     var canon = Operation.fromProtocol(update);
@@ -408,13 +460,14 @@ Client.prototype = {
     var posChanges = this.receiveCanon(canon);
     changes = changes.concat(this.sent.dup().list)
       .concat(this.local.dup().list);
-    var change = new Operation();
-    change.list = changes;
+    var change = changes.map(function(change) {
+      return [[], change.action, change.key, change.value];
+    });
 
-    // Go through listeners.
-    var listnlen = this.listeners.length;
+    // Go through changeListeners.
+    var listnlen = this.changeListeners.length;
     for (var i = 0; i < listnlen; i++) {
-      var obj = this.listeners[i];
+      var obj = this.changeListeners[i];
       var listener = obj.listener;
       var options = obj.options;
       var impactedPath = (options.path === undefined) ||
@@ -571,11 +624,25 @@ Client.prototype = {
     this.canon.apply(sent);
     return sent;
   },
-  insert: function insertOp(offset, value) {
-    this.local.insert(offset, value, this.base, this.localId);
+
+  sendToServer: function sendToServer() {
+    if (this.sent.list.length > 0) { return; }
+    if (this.local.list.length > 0) {
+      var data = JSON.stringify(this.local.toProtocol());
+      setTimeout(() => this.send(data), 2000)
+      //this.send(JSON.stringify(this.local.toProtocol()));
+      this.localToSent();
+    }
   },
-  delete: function deleteOp(offset, value) {
-    this.local.delete(offset, value, this.base, this.localId);
+  add: function addOp(path, key, value) {
+    // TODO: find object to apply this on.
+    this.local.add(path, key, value, this.base, this.localId);
+    this.sendToServer();
+  },
+  remove: function removeOp(path, key, value) {
+    // TODO: find object to apply this on.
+    this.local.remove(path, key, value, this.base, this.localId);
+    this.sendToServer();
   },
   toString: function() {
     var total = this.canon.combine(this.sent).combine(this.local);
