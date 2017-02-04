@@ -628,9 +628,9 @@ Client.prototype = {
   sendToServer: function sendToServer() {
     if (this.sent.list.length > 0) { return; }
     if (this.local.list.length > 0) {
-      var data = JSON.stringify(this.local.toProtocol());
-      setTimeout(() => this.send(data), 2000)
-      //this.send(JSON.stringify(this.local.toProtocol()));
+      //var data = JSON.stringify(this.local.toProtocol());
+      //setTimeout(() => this.send(data), 2000)
+      this.send(JSON.stringify(this.local.toProtocol()));
       this.localToSent();
     }
   },
