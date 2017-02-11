@@ -23,7 +23,7 @@ function CanopCodemirrorHook(editor, options) {
   this.editorChange = this.editorChange.bind(this);
   this.remoteChange = this.remoteChange.bind(this);
 
-  this.canopClient.onChange(this.remoteChange, {path: []});
+  this.canopClient.on('change', this.remoteChange);
   this.connect(options);
 }
 
@@ -46,8 +46,8 @@ CanopCodemirrorHook.prototype = {
     this.canopClient.receive('' + event.data);
   },
 
-  remoteChange: function CCHremoteUpdate(change, posChanges) {
-    this.updateEditor(change, posChanges);
+  remoteChange: function CCHremoteUpdate(event) {
+    this.updateEditor(event.changes, event.posChanges);
   },
 
   editorChange: function CCHeditorChange(editor, change) {
@@ -99,7 +99,7 @@ CanopCodemirrorHook.prototype = {
   },
 
   updateCursor: function CCHupdateCursor(posChanges, oldCursor) {
-    cursor = canop.changeKey(oldCursor, posChanges, true);
+    cursor = canop.changePosition(oldCursor, posChanges, true);
     this.editor.setCursor(this.editor.posFromIndex(cursor));
   }
 };

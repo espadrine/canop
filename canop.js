@@ -52,13 +52,13 @@ AtomicOperation.prototype = {
       value: this.value,
     };
 
-    var key = changeKey(this.key, changes);
+    var key = changePosition(this.key, changes);
     // If we are adding, the end of the change has no context before the
     // insertion.
     if (this.action === actions.stringAdd) {
       var end = key + this.value.length;
     } else if (this.action === actions.stringRemove) {
-      var end = changeKey(oldEnd, changes);
+      var end = changePosition(oldEnd, changes);
     }
     if (key === undefined || end === undefined) {
       this.key = 0;  // Nulled to avoid adding spaces at the end in toString().
@@ -145,9 +145,9 @@ PosChange.prototype = {
 // Return a key that was modified by changes, a list of PosChanges.
 // Return undefined if it cannot find one, unless bestGuess is true.
 // The following must hold:
-// changeKey(changeKey(key, changes), changes.map(c => c.inverse())) == key
+// changePosition(changePosition(key, changes), changes.map(c => c.inverse())) == key
 // or undefined.
-var changeKey = function changeKey(key, changes, bestGuess) {
+var changePosition = function changePosition(key, changes, bestGuess) {
   var originalKey = key;
   for (var i = 0; i < changes.length; i++) {
     var change = changes[i];
@@ -370,8 +370,8 @@ function Client(params) {
   // Tailor expansion
   // function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
   this.localId = Math.floor(Math.random() * MAX_INT);
-  this.changeListeners = [];  // Array of {listener: function(Operation), options}.
-  this.updateListeners = [];  // Array of {listener: function(Operation), options}.
+  // Map from event names to array of {listener: function(event), options}.
+  this.listeners = {};
 
   if (params.data !== undefined) {
     this.canon.add([], 0, params.data, this.base, this.localId);
@@ -416,17 +416,26 @@ Client.prototype = {
 
   // As a client.
 
-  // Listen to incoming changes (provided by receiveChange()).
-  // listener: function(Operation), options: {path: [], type: String / null}.
-  onChange: function(listener, options) {
-    this.changeListeners.push({listener: listener, options: options});
+  on: function(eventName, listener, options) {
+    this.listeners[eventName] = this.listeners[eventName] || [];
+    this.listeners[eventName].push({func: listener, options: options});
   },
-
-  // As a client.
-  // Listen to incoming updates (yielding the corresponding data.).
-  // listener: function(Object), options: {path: [], type: String / null}.
-  onUpdate: function(listener, options) {
-    this.updateListeners.push({listener: listener, options: options});
+  emit: function(eventName, event) {
+    var listeners = this.listeners[eventName];
+    var listenersLen = listeners.length;
+    for (var i = 0; i < listenersLen; i++) {
+      listeners[i].func(event);
+    }
+  },
+  removeListener: function(eventName, listener) {
+    var listeners = this.listeners[eventName];
+    var listenersLen = listeners.length;
+    for (var i = 0; i < listenersLen; i++) {
+      if (listeners[i].func === listener) {
+        listeners.splice(i, 1);
+        return;
+      }
+    }
   },
 
   // Client-side protocol reception.
@@ -463,21 +472,8 @@ Client.prototype = {
     var change = changes.map(function(change) {
       return [[], change.action, change.key, change.value];
     });
-
-    // Go through changeListeners.
-    var listnlen = this.changeListeners.length;
-    for (var i = 0; i < listnlen; i++) {
-      var obj = this.changeListeners[i];
-      var listener = obj.listener;
-      var options = obj.options;
-      var impactedPath = (options.path === undefined) ||
-        this.impactedPath(options.path, path);
-      var validType = (options.type === undefined) ||
-        (options.type === this.pathType(path));
-      if (impactedPath && validType) {
-        listener(change, posChanges);
-      }
-    }
+    this.emit('change', {changes: change, posChanges: posChanges});
+    // TODO: emit the update event.
   },
   // Is path impacted by a change on diffPath?
   impactedPath: function(path, diffPath) {
@@ -561,7 +557,7 @@ Client.prototype = {
     var base = sent.list[0].mark[0];
     var origin = sent.list[0].mark[1];
     var canon = this.operationsSinceBase(base);
-    // TODO: remove canon operations from sent.
+    // Remove canon operations from sent.
     // It is necessary in the following situation:
     // 1. Client ──(x)─→ Server
     // 2. Client ──(x y z)─→ Server (x)
@@ -652,7 +648,8 @@ Client.prototype = {
 
 exports.operationFromProtocol = Operation.fromProtocol;
 exports.action = actions;
-exports.changeKey = changeKey;
+exports.changePosition = changePosition;
+exports.PosChange = PosChange;
 
 return exports;
 

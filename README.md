@@ -16,16 +16,38 @@ server.addClient({
   onReceive: function(receive) { client.send = receive; },
 });
 
-// List of changes: [path, action type, parameters…]
-client.onChange(function(change) {}, {path: ['some']});
-client.onLocalChange(function(change) {}, {path: ['some']});
-client.onUpdate(function(updated) {}, {path: ['some']});
-client.onLocalUpdate(function(updated) {}, {path: ['some']});
-
-client.get(['some']);  // 'data'
+client.get(['some']);  // 'data' TODO
 client.add(['some'], 0, 'modified ');  // 'modified data'
 client.move([], 'some', ['final']);  // {final: 'modified data'}
 
+// This event has the following keys:
+// - changes: Array of [path, action type, parameters…]
+// - posChanges: Array of canop.PosChange
+var changeListener = function(event) {};
+// Changes from other computers.
+client.on('change', changeListener);
+// Changes from this computer.
+client.on('localChange', changeListener);
+// An immutable copy of the data at a path. TODO
+client.on('update', function(updated) {}, {path: ['some']});
+client.on('localUpdate', function(updated) {}, {path: ['some']});
+client.removeListener('change', changeListener);
+
+// When all local operations are acknowledged by the server. TODO
+client.on('synced', function() {});
+// When some local operations are not acknowledged by the server. TODO
+client.on('syncing', function() {});
+// When we cannot send operations to the server. TODO
+client.on('unsyncable', function() {});
+
+// Return a position (eg. the index of a cursor in a string) corresponding to an
+// initial position, mapped through a sequence of changes. You can get an
+// Array of PosChanges from the 'change' event.
+// By default, returns undefined if it cannot give an intention-preserving
+// result. If bestGuess is true, returns a guess instead.
+canop.changePosition(position, posChanges, bestGuess);
+
+// Create custom operations. TODO
 var actionType = client.registerAction(
   canop.type.list | canop.type.string,  // Types this applies to.
   // Put whatever parameters here, modify object.
