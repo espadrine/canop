@@ -29,6 +29,7 @@ function CanopCodemirrorHook(editor, options) {
 
 CanopCodemirrorHook.prototype = {
   connect: function CCHconnect(options) {
+    var self = this;
     this.socket = new WebSocket(
       // Trick: use the end of either http: or https:.
       'ws' + window.location.protocol.slice(4) + '//' +
@@ -39,6 +40,10 @@ CanopCodemirrorHook.prototype = {
     this.socket.addEventListener('error', options.error);
     this.socket.addEventListener('close', options.close);
     this.socket.addEventListener('open', options.open);
+    this.socket.addEventListener('close', function(e) {
+      self.canopClient.emit('unsyncable', e);
+    });
+    // TODO: Automatic reconnection.
   },
 
   socketReceive: function CCHsocketReceive(event) {

@@ -422,6 +422,7 @@ Client.prototype = {
   },
   emit: function(eventName, event) {
     var listeners = this.listeners[eventName];
+    if (listeners == null) { return; }
     var listenersLen = listeners.length;
     for (var i = 0; i < listenersLen; i++) {
       listeners[i].func(event);
@@ -429,6 +430,7 @@ Client.prototype = {
   },
   removeListener: function(eventName, listener) {
     var listeners = this.listeners[eventName];
+    if (listeners == null) { return; }
     var listenersLen = listeners.length;
     for (var i = 0; i < listenersLen; i++) {
       if (listeners[i].func === listener) {
@@ -473,6 +475,9 @@ Client.prototype = {
       return [[], change.action, change.key, change.value];
     });
     this.emit('change', {changes: change, posChanges: posChanges});
+    if (this.local.list.length === 0 && this.sent.list.length === 0) {
+      this.emit('synced');
+    }
     // TODO: emit the update event.
   },
   // Is path impacted by a change on diffPath?
@@ -626,19 +631,25 @@ Client.prototype = {
     if (this.local.list.length > 0) {
       //var data = JSON.stringify(this.local.toProtocol());
       //setTimeout(() => this.send(data), 2000)
-      this.send(JSON.stringify(this.local.toProtocol()));
-      this.localToSent();
+      try {
+        this.send(JSON.stringify(this.local.toProtocol()));
+        this.localToSent();
+      } catch(e) {
+        this.emit('unsyncable', e);
+      }
     }
   },
   add: function addOp(path, key, value) {
     // TODO: find object to apply this on.
     this.local.add(path, key, value, this.base, this.localId);
     this.sendToServer();
+    this.emit('syncing');
   },
   remove: function removeOp(path, key, value) {
     // TODO: find object to apply this on.
     this.local.remove(path, key, value, this.base, this.localId);
     this.sendToServer();
+    this.emit('syncing');
   },
   toString: function() {
     var total = this.canon.combine(this.sent).combine(this.local);

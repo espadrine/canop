@@ -33,11 +33,11 @@ client.on('update', function(updated) {}, {path: ['some']});
 client.on('localUpdate', function(updated) {}, {path: ['some']});
 client.removeListener('change', changeListener);
 
-// When all local operations are acknowledged by the server. TODO
+// When all local operations are acknowledged by the server.
 client.on('synced', function() {});
-// When some local operations are not acknowledged by the server. TODO
+// When some local operations are not acknowledged by the server.
 client.on('syncing', function() {});
-// When we cannot send operations to the server. TODO
+// When we cannot send operations to the server.
 client.on('unsyncable', function() {});
 
 // Return a position (eg. the index of a cursor in a string) corresponding to an
