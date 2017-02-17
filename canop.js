@@ -629,6 +629,7 @@ Client.prototype = {
   sendToServer: function sendToServer() {
     if (this.sent.list.length > 0) { return; }
     if (this.local.list.length > 0) {
+      this.emit('syncing');
       //var data = JSON.stringify(this.local.toProtocol());
       //setTimeout(() => this.send(data), 2000)
       try {
@@ -639,17 +640,19 @@ Client.prototype = {
       }
     }
   },
+  get: function(path) {
+    // TODO: find object.
+    return this.toString();
+  },
   add: function addOp(path, key, value) {
     // TODO: find object to apply this on.
     this.local.add(path, key, value, this.base, this.localId);
     this.sendToServer();
-    this.emit('syncing');
   },
   remove: function removeOp(path, key, value) {
     // TODO: find object to apply this on.
     this.local.remove(path, key, value, this.base, this.localId);
     this.sendToServer();
-    this.emit('syncing');
   },
   toString: function() {
     var total = this.canon.combine(this.sent).combine(this.local);

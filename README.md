@@ -2,6 +2,7 @@
 JSON synchronization protocol.*
 
 **Work in progress**. Status: alpha.
+Currently only supports string values.
 
 ```js
 var canop = require('canop');
@@ -16,7 +17,7 @@ server.addClient({
   onReceive: function(receive) { client.send = receive; },
 });
 
-client.get(['some']);  // 'data' TODO
+client.get(['some']);  // 'data'
 client.add(['some'], 0, 'modified ');  // 'modified data'
 client.move([], 'some', ['final']);  // {final: 'modified data'}
 
