@@ -6,12 +6,8 @@ Currently only supports string values.
 
 ```js
 var canop = require('canop');
-var server = new canop.Server({
-  data: {some: 'data'}
-});
-var client = new canop.Client({
-  send: function(message) {},
-});
+var server = new canop.Server({ data: {some: 'data'} });
+var client = new canop.Client({ send: function(message) {}, });
 server.addClient({
   send: function(message) { client.receive(message); },
   onReceive: function(receive) { client.send = receive; },

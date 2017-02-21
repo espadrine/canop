@@ -4,7 +4,6 @@ var camp = require('camp').start({ port: +process.argv[2] || 1234 });
 var canop = require('./canop');
 
 var shared = new canop.Server({ data: '' });
-var c = 1;
 
 camp.ws('text', function(socket) {
   var client = {
@@ -14,7 +13,7 @@ camp.ws('text', function(socket) {
     },
     onReceive: function(receive) {
       socket.on('message', function(msg) {
-        console.log('<< ' + msg);
+        console.log('<' + client.id + ' ' + msg);
         receive(msg);
       });
     },

@@ -57,7 +57,7 @@ Delta for booleans: [20] to set, 21 to reset, 22 to toggle.
 
 Client: `[0, protocol version]`.
 
-Server: `[1, machine, json, base]`.
+Server: `[1, json, base, machine]`.
 
 ## Informational
 

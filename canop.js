@@ -276,13 +276,13 @@ Operation.prototype = {
   add: function addOp(path, offset, value, base, local) {
     var aop = new AtomicOperation(actions.stringAdd, offset, value, base, local);
     this.list.push(aop);
-    return this;
+    return aop;
   },
   // Delete a value to the operation. Mutates this.
   remove: function removeOp(path, offset, value, base, local) {
     var aop = new AtomicOperation(actions.stringRemove, offset, value, base, local);
     this.list.push(aop);
-    return this;
+    return aop;
   },
   // Assume we start with the empty value.
   toString: function toString() {
@@ -356,29 +356,42 @@ function equalMark(mark1, mark2) {
 // params: an object
 // - data: content of the root canonical operation.
 // - base: integer identifying the root canonical operation.
+// - disableData: for clients, do not hold data in this.data.
+//   Avoids holding that memory, but breaks get(), toString(),
+//   update, localUpdate.
 // - send: function(String); for clients, function that will be called to
 //   transmit protocol information to the server. It abstracts the method by
 //   which data is exchanged.
 function Client(params) {
-  this.base = params.base || 0;  // canon index; 0 means no root.
-  this.local = new Operation();
-  this.sent = new Operation();
-  this.canon = new Operation();
-  // Default machine id; overriden by receiving one from the server.
-  // Collision probability: below 0.5 for n < 111743588.
-  // function(n, max) { return 1 - fact(max) / (Math.pow(max, n) * fact(max - n)); }
-  // Tailor expansion
-  // function(n, max) { return 1 - Math.exp(-n*(n-1)/(max*2)); }
-  this.localId = Math.floor(Math.random() * MAX_INT);
-  // Map from event names to array of {listener: function(event), options}.
+  var self = this;
+  this.base = params.base || 0;  // Most recent known canon operation index.
+  this.localId = 0;              // Identifier of the current machine.
+  this.local = new Operation();  // Operation for local changes.
+  this.sent = new Operation();   // Operation for changes sent but not acknowledged.
+  this.canon = new Operation();  // Operation for changes acknowledged by the server.
+  // Map from event names to array of {func: function(event), options}.
   this.listeners = {};
 
-  if (params.data !== undefined) {
-    this.canon.add([], 0, params.data, this.base, this.localId);
+  this.on('change', function(event) { self.updateData(event); });
+  this.on('localChange', function(event) { self.updateData(event); });
+  // Note: servers should never disable data.
+  if (params.disableData !== undefined) {
+    this.disableData = params.disableData;
   }
+  this.data = undefined;  // Holds the current data including local operations.
+  // Also, clients should never have params.data.
+  // FIXME: maybe separate Server and Client into two classes.
+  if (params.data !== undefined) {
+    this.isServer = true;
+    this.data = params.data;
+    this.emit('localChange', {changes: [[[], actions.set, this.data]]});
+  } else {
+    this.isServer = false;
+  }
+
   this.send = params.send || function() {};
+  this.clients = {}; // Map from client ids to {send, onReceive}.
   this.nextClientId = 1;
-  this.clients = {};
 }
 exports.Client = Client;
 exports.Server = Client;
@@ -407,7 +420,7 @@ Client.prototype = {
     });
 
     // Send welcome message to new client.
-    client.send(JSON.stringify([1, client.id, self.toString(), self.base]));
+    client.send(JSON.stringify([1, self.data, self.base, client.id]));
   },
 
   removeClient: function(client) {
@@ -448,18 +461,25 @@ Client.prototype = {
     // FIXME: validate that the update conforms to the protocol.
     var messageType = protocol[0];
     if (messageType === 1) {  // Raw data.
-      var machine = protocol[1];
-      var json = protocol[2];
-      var base = protocol[3];
-      this.localId = machine;
-      this.receiveChange([1, [], [[[base, machine, 0], [63, 0, json]]]]);
+      this.reset(protocol[1], protocol[2], protocol[3]);
     } else if (messageType === 2) {  // Diff.
       this.receiveChange(protocol);
     }
     this.sendToServer();
   },
-  // Receive an update conforming to the protocol, as a String.
-  // Return a list of AtomicOperations.
+  // Emit change / localChange events using their proper formats.
+  // eventName: either 'change' or 'localChange'.
+  // changes: list of AtomicOperation.
+  // posChanges: list of PosChange.
+  emitChanges: function(eventName, changes, posChanges) {
+    var change = changes.map(function(change) {
+      return [[], change.action, change.key, change.value];
+    });
+    this.emit(eventName, {changes: change, posChanges: posChanges});
+  },
+  // Receive an external update conforming to the protocol, as a String.
+  // Emit the corresponding change, update and synced events.
+  // This is meant for clients.
   receiveChange: function(update) {
     var path = update[1];
     var deltas = update[2];
@@ -471,30 +491,21 @@ Client.prototype = {
     var posChanges = this.receiveCanon(canon);
     changes = changes.concat(this.sent.dup().list)
       .concat(this.local.dup().list);
-    var change = changes.map(function(change) {
-      return [[], change.action, change.key, change.value];
-    });
-    this.emit('change', {changes: change, posChanges: posChanges});
+    this.emitChanges('change', changes, posChanges);
     if (this.local.list.length === 0 && this.sent.list.length === 0) {
       this.emit('synced');
     }
     // TODO: emit the update event.
   },
-  // Is path impacted by a change on diffPath?
-  impactedPath: function(path, diffPath) {
-    return true;
-  },
-  pathType: function(path) {
-    return String;
-  },
 
-  reset: function(value, base) {
+  reset: function(data, base, localId) {
     this.local = new Operation();
     this.sent = new Operation();
     this.canon = new Operation();
-    this.canon.insert(0, value);
-    this.canon.list[0].mark[0] = base;
+    this.localId = localId;
+    if (!this.disableData) { this.data = data; }
     this.base = base;
+    this.receiveChange([1, [], [[[base, localId, 0], [63, 0, data]]]]);
   },
   localToSent: function() {
     // Switch all local operations to sent.
@@ -623,6 +634,7 @@ Client.prototype = {
       sent.list[i].mark[0] = this.base;
     }
     this.canon.apply(sent);
+    this.emitChanges('change', sent.list, posChanges);
     return sent;
   },
 
@@ -640,23 +652,59 @@ Client.prototype = {
       }
     }
   },
+
+  // This is meant to be a callback of the update and localUpdate events.
+  updateData: function(event) {
+    var changes = event.changes;
+    for (var i = 0; i < changes.length; i++) {
+      var change = changes[i];
+      // TODO: find object at the correct path.
+      var path = change[0];
+      var target = this.data;
+      var actionType = change[1];
+      if (actionType === actions.set) {
+        target = change[2];
+      } else if (actionType === actions.stringAdd) {
+        var offset = change[2];
+        var value = change[3];
+        target = target.slice(0, offset) +
+          value + target.slice(offset);
+      } else if (actionType === actions.stringRemove) {
+        var offset = change[2];
+        var value = change[3];
+        target = target.slice(0, offset) +
+          target.slice(offset + value.length);
+      }
+      this.data = target;
+    }
+  },
+
   get: function(path) {
-    // TODO: find object.
-    return this.toString();
+    if (this.disableData) {
+      throw new Error("Canop was configured not to hold data");
+    }
+    if (this.data === undefined) {
+      throw new Error("Canop does not hold any data yet");
+    }
+    // TODO: find object at the correct path.
+    return this.data;
   },
   add: function addOp(path, key, value) {
-    // TODO: find object to apply this on.
-    this.local.add(path, key, value, this.base, this.localId);
+    // TODO: find object at the correct path.
+    // TODO: localChange, localUpdate events.
+    var aop = this.local.add(path, key, value, this.base, this.localId);
+    this.emitChanges('localChange', [aop]);
     this.sendToServer();
   },
   remove: function removeOp(path, key, value) {
-    // TODO: find object to apply this on.
-    this.local.remove(path, key, value, this.base, this.localId);
+    // TODO: find object at the correct path.
+    // TODO: localChange, localUpdate events.
+    var aop = this.local.remove(path, key, value, this.base, this.localId);
+    this.emitChanges('localChange', [aop]);
     this.sendToServer();
   },
   toString: function() {
-    var total = this.canon.combine(this.sent).combine(this.local);
-    return total.toString();
+    return this.get([]).toString();
   }
 };
 
