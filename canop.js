@@ -88,8 +88,7 @@ AtomicOperation.prototype = {
     return op;
   },
   toProtocol: function toProtocol() {
-    // TODO: right now we only support strings (4). Support JSON.
-    return [this.mark, [4, this.action, this.key, this.value]];
+    return [this.mark, [this.action, this.key, this.value]];
   },
 };
 
@@ -186,12 +185,12 @@ AtomicOperation.fromObject = function (data) {
   return ao;
 };
 
+// delta: [mark, [action, parameters…]]
 AtomicOperation.fromProtocol = function (delta) {
   var mark = delta[0];
-  var type = delta[1][0];  // TODO: validate type upon applying.
-  var action = delta[1][1];
-  var key = delta[1][2];
-  var value = delta[1][3];
+  var action = delta[1][0];
+  var key = delta[1][1];
+  var value = delta[1][2];
   var ao = new AtomicOperation(action, key, value, mark[0]);
   opid--;  // Compensate opid increment.
   ao.mark = mark.slice();
@@ -204,8 +203,8 @@ function Operation(ops) {
 }
 exports.Operation = Operation;
 
+// data: [2, path, deltas]
 Operation.fromProtocol = function (data) {
-  // data: [2, path, deltas]
   var op = new Operation();
   var deltas = data[2];
   for (var i = 0; i < deltas.length; i++) {
