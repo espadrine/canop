@@ -396,36 +396,6 @@ exports.Client = Client;
 exports.Server = Client;
 
 Client.prototype = {
-  // As a server.
-
-  // client: an object with the following fields
-  // - send: function(message)
-  // - onReceive: function(receive: function(message))
-  addClient: function(client) {
-    var self = this;
-    client.id = self.nextClientId;
-    self.nextClientId++;
-    self.clients[client.id] = client;
-
-    client.onReceive(function receiveFromClient(message) {
-      var data = JSON.parse(message);
-      var change = Operation.fromProtocol(data);  // delta.
-      var canon = self.receiveSent(change);
-      var message = JSON.stringify(canon.toProtocol());
-      for (var clientId in self.clients) {
-        var client = self.clients[clientId];
-        client.send(message);
-      }
-    });
-
-    // Send welcome message to new client.
-    client.send(JSON.stringify([1, self.data, self.base, client.id]));
-  },
-
-  removeClient: function(client) {
-    delete this.clients[client.id];
-  },
-
   // As a client.
 
   on: function(eventName, listener, options) {
@@ -511,15 +481,6 @@ Client.prototype = {
     this.sent.list = this.sent.list.concat(this.local.list);
     this.local.list = [];
   },
-  // Return a list of atomic operations.
-  operationsSinceBase: function(base) {
-    for (var i = this.canon.list.length - 1; i >= 0; i--) {
-      if (this.canon.list[i].mark[0] <= base) {
-        return this.canon.list.slice(i + 1);
-      }
-    }
-    return this.canon.list;
-  },
   // Integrate canonical operations and rebase local / sent operations.
   // Takes an Operation.
   receiveCanon: function(canon) {
@@ -566,6 +527,116 @@ Client.prototype = {
     }
     return posChanges;
   },
+
+  sendToServer: function sendToServer() {
+    if (this.sent.list.length > 0) { return; }
+    if (this.local.list.length > 0) {
+      this.emit('syncing');
+      //var data = JSON.stringify(this.local.toProtocol());
+      //setTimeout(() => this.send(data), 2000)
+      try {
+        this.send(JSON.stringify(this.local.toProtocol()));
+        this.localToSent();
+      } catch(e) {
+        this.emit('unsyncable', e);
+      }
+    }
+  },
+
+  // This is meant to be a callback of the update and localUpdate events.
+  updateData: function(event) {
+    var changes = event.changes;
+    for (var i = 0; i < changes.length; i++) {
+      var change = changes[i];
+      // TODO: find object at the correct path.
+      var path = change[0];
+      var target = this.data;
+      var actionType = change[1];
+      if (actionType === actions.set) {
+        target = change[2];
+      } else if (actionType === actions.stringAdd) {
+        var offset = change[2];
+        var value = change[3];
+        target = target.slice(0, offset) +
+          value + target.slice(offset);
+      } else if (actionType === actions.stringRemove) {
+        var offset = change[2];
+        var value = change[3];
+        target = target.slice(0, offset) +
+          target.slice(offset + value.length);
+      }
+      this.data = target;
+    }
+  },
+
+  get: function(path) {
+    if (this.disableData) {
+      throw new Error("Canop was configured not to hold data");
+    }
+    if (this.data === undefined) {
+      throw new Error("Canop does not hold any data yet");
+    }
+    // TODO: find object at the correct path.
+    return this.data;
+  },
+  add: function addOp(path, key, value) {
+    // TODO: find object at the correct path.
+    // TODO: localChange, localUpdate events.
+    var aop = this.local.add(path, key, value, this.base, this.localId);
+    this.emitChanges('localChange', [aop]);
+    this.sendToServer();
+  },
+  remove: function removeOp(path, key, value) {
+    // TODO: find object at the correct path.
+    // TODO: localChange, localUpdate events.
+    var aop = this.local.remove(path, key, value, this.base, this.localId);
+    this.emitChanges('localChange', [aop]);
+    this.sendToServer();
+  },
+  toString: function() {
+    return this.get([]).toString();
+  },
+
+  // As a server.
+
+  // client: an object with the following fields
+  // - send: function(message)
+  // - onReceive: function(receive: function(message))
+  addClient: function(client) {
+    var self = this;
+    client.id = self.nextClientId;
+    self.nextClientId++;
+    self.clients[client.id] = client;
+
+    client.onReceive(function receiveFromClient(message) {
+      var data = JSON.parse(message);
+      var change = Operation.fromProtocol(data);  // delta.
+      var canon = self.receiveSent(change);
+      var message = JSON.stringify(canon.toProtocol());
+      for (var clientId in self.clients) {
+        var client = self.clients[clientId];
+        client.send(message);
+      }
+    });
+
+    // Send welcome message to new client.
+    client.send(JSON.stringify([1, self.data, self.base, client.id]));
+  },
+
+  removeClient: function(client) {
+    delete this.clients[client.id];
+  },
+
+  // Return a list of atomic operations.
+  operationsSinceBase: function(base) {
+    for (var i = this.canon.list.length - 1; i >= 0; i--) {
+      if (this.canon.list[i].mark[0] <= base) {
+        return this.canon.list.slice(i + 1);
+      }
+    }
+    return this.canon.list;
+  },
+
   // Canonize sent operations. Takes an Operation.
   // Returns the canonized operations.
   receiveSent: function(sent) {
@@ -637,74 +708,6 @@ Client.prototype = {
     return sent;
   },
 
-  sendToServer: function sendToServer() {
-    if (this.sent.list.length > 0) { return; }
-    if (this.local.list.length > 0) {
-      this.emit('syncing');
-      //var data = JSON.stringify(this.local.toProtocol());
-      //setTimeout(() => this.send(data), 2000)
-      try {
-        this.send(JSON.stringify(this.local.toProtocol()));
-        this.localToSent();
-      } catch(e) {
-        this.emit('unsyncable', e);
-      }
-    }
-  },
-
-  // This is meant to be a callback of the update and localUpdate events.
-  updateData: function(event) {
-    var changes = event.changes;
-    for (var i = 0; i < changes.length; i++) {
-      var change = changes[i];
-      // TODO: find object at the correct path.
-      var path = change[0];
-      var target = this.data;
-      var actionType = change[1];
-      if (actionType === actions.set) {
-        target = change[2];
-      } else if (actionType === actions.stringAdd) {
-        var offset = change[2];
-        var value = change[3];
-        target = target.slice(0, offset) +
-          value + target.slice(offset);
-      } else if (actionType === actions.stringRemove) {
-        var offset = change[2];
-        var value = change[3];
-        target = target.slice(0, offset) +
-          target.slice(offset + value.length);
-      }
-      this.data = target;
-    }
-  },
-
-  get: function(path) {
-    if (this.disableData) {
-      throw new Error("Canop was configured not to hold data");
-    }
-    if (this.data === undefined) {
-      throw new Error("Canop does not hold any data yet");
-    }
-    // TODO: find object at the correct path.
-    return this.data;
-  },
-  add: function addOp(path, key, value) {
-    // TODO: find object at the correct path.
-    // TODO: localChange, localUpdate events.
-    var aop = this.local.add(path, key, value, this.base, this.localId);
-    this.emitChanges('localChange', [aop]);
-    this.sendToServer();
-  },
-  remove: function removeOp(path, key, value) {
-    // TODO: find object at the correct path.
-    // TODO: localChange, localUpdate events.
-    var aop = this.local.remove(path, key, value, this.base, this.localId);
-    this.emitChanges('localChange', [aop]);
-    this.sendToServer();
-  },
-  toString: function() {
-    return this.get([]).toString();
-  }
 };
 
 exports.operationFromProtocol = Operation.fromProtocol;
