@@ -484,7 +484,6 @@ Client.prototype = {
   // Integrate canonical operations and rebase local / sent operations.
   // Takes an Operation.
   receiveCanon: function(canon) {
-    this.canon.apply(canon);
     var sent = this.sent.dup();
     // Remove all canon operations from sent.
     for (var i = 0; i < canon.list.length; i++) {
@@ -518,7 +517,7 @@ Client.prototype = {
       posChanges.push(localOp.change());
     }
     // Rebase local operations.
-    this.base = this.canon.list[this.canon.list.length - 1].mark[0];
+    this.base = canon.list[canon.list.length - 1].mark[0];
     for (var i = 0; i < this.sent.list.length; i++) {
       this.sent.list[i].mark[0] = this.base;
     }
@@ -532,9 +531,9 @@ Client.prototype = {
     if (this.sent.list.length > 0) { return; }
     if (this.local.list.length > 0) {
       this.emit('syncing');
-      //var data = JSON.stringify(this.local.toProtocol());
-      //setTimeout(() => this.send(data), 2000)
       try {
+        //var data = JSON.stringify(this.local.toProtocol());
+        //setTimeout(() => this.send(data), 2000)
         this.send(JSON.stringify(this.local.toProtocol()));
         this.localToSent();
       } catch(e) {
