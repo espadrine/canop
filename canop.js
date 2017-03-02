@@ -422,12 +422,99 @@ Client.prototype = {
     }
   },
 
-  // Client-side protocol reception.
-  receive: function(protocol) {
+  // protocol: JSON string
+  // Validate protocol data and return it as parsed.
+  // May throw errors if it does not follow the protocol.
+  readProtocol: function(protocolData) {
+    var protocol = protocolData;
     if (typeof protocol === 'string') {
-      protocol = JSON.parse(protocol);
+      try {
+        protocol = JSON.parse(protocol);
+      } catch(e) {
+        throw new Error("Invalid Canop message: " + e.message + "\n" +
+          "Message: " + protocolData);
+      }
     }
-    // FIXME: validate that the update conforms to the protocol.
+    if (!(Object(protocol) instanceof Array)) {
+      throw new Error("Invalid Canop message: toplevel is not an array.\n" +
+        "Message: " + protocolData);
+    }
+    if (protocol[0] === 0) {  // Please
+      if (protocol[1] !== 0) {  // Only allow version 0.
+        throw new Error("Invalid Canop handshake with protocol version " +
+          protocol[1] + "\nMessage: " + protocolData);
+      }
+    } else if (protocol[0] === 1) {  // State
+      if (protocol[1] === undefined) {  // json
+        throw new Error("Invalid Canop message: undefined state\nMessage:" +
+          protocolData);
+      }
+      if (typeof protocol[2] !== "number") {  // base
+        throw new Error("Invalid Canop message: non-number base\n" +
+          "Message: " + protocolData);
+      }
+      if (typeof protocol[3] !== "number") {  // machine
+        throw new Error("Invalid Canop message: non-number " +
+          "machine\nMessage: " + protocolData);
+      }
+    } else if (protocol[0] === 2) {  // Delta
+      if (!(Object(protocol[1]) instanceof Array)) {
+        throw new Error("Invalid Canop message: delta path is not an " +
+          "Array.\nMessage: " + protocolData);
+      }
+      if (!(Object(protocol[2]) instanceof Array)) {
+        throw new Error("Invalid Canop message: deltas are not an " +
+          "Array.\nMessage: " + protocolData);
+      }
+      for (var i = 0; i < protocol[2].length; i++) {
+        var delta = protocol[2][i];
+        if (!(Object(delta[0]) instanceof Array)) {
+          throw new Error("Invalid Canop message: delta " + i +
+            " has non-Array mark.\nMessage: " + protocolData);
+        }
+        for (var j = 0; j < delta[0].length; j++) {
+          if (typeof delta[0][j] !== "number") {
+            throw new Error("Invalid Canop message: delta " + i +
+              " has a non-number in mark at position " + j + ".\n" +
+              "Message: " + protocolData);
+          }
+        }
+        if (!(Object(delta[1]) instanceof Array)) {
+          throw new Error("Invalid Canop message: delta " + i +
+            " has non-Array operation.\nMessage: " + protocolData);
+        }
+        if (delta[1][0] === 0) {  // set
+        } else if ((delta[1][0] === 7) || (delta[1][0] === 8)) {
+          // string add / remove
+          if (typeof delta[1][1] !== "number") {  // offset
+            throw new Error("Invalid Canop message: delta " + i +
+              " has non-number string offset.\nMessage: " + protocolData);
+          }
+          if (typeof delta[1][2] !== "string") {
+            throw new Error("Invalid Canop message: delta " + i +
+              " has non-string string edition.\nMessage: " + protocolData);
+          }
+        } else {
+          throw new Error("Invalid Canop message: delta " + i +
+            " has an unsupported operation type.\n" +
+            "Message: " + protocolData);
+        }
+      }
+    } else {
+      throw new Error("Invalid Canop message: unknown message type " +
+        protocol[0] + "\nMessage: " + protocolData);
+    }
+    return protocol;
+  },
+
+  // Client-side protocol reception.
+  receive: function(protocolData) {
+    try {
+      var protocol = this.readProtocol(protocolData);
+    } catch(e) {
+      console.error(e);
+      return;
+    }
     var messageType = protocol[0];
     if (messageType === 1) {  // Raw data.
       this.reset(protocol[1], protocol[2], protocol[3]);
@@ -608,8 +695,13 @@ Client.prototype = {
     self.clients[client.id] = client;
 
     client.onReceive(function receiveFromClient(message) {
-      var data = JSON.parse(message);
-      var change = Operation.fromProtocol(data);  // delta.
+      try {
+        var protocol = self.readProtocol(message);
+      } catch(e) {
+        console.error(e);
+        return;
+      }
+      var change = Operation.fromProtocol(protocol);
       var canon = self.receiveSent(change);
       var message = JSON.stringify(canon.toProtocol());
       for (var clientId in self.clients) {
