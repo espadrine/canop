@@ -16,6 +16,8 @@ server.addClient({
 client.get(['some']);  // 'data'
 client.add(['some'], 0, 'modified ');  // 'modified data'
 client.move([], 'some', ['final']);  // {final: 'modified data'}
+client.on('signal', function(event) { event.machine, event.data });
+client.signal({ name: 'Grace', cursor: ['some', 9] });
 
 // This event has the following keys:
 // - changes: Array of [path, action type, parameters…]
@@ -110,6 +112,9 @@ custom atomic operation.
 
 # TODO
 
+- Send cursor signals
+- Show other cursors
+- Automatic reconnection
 - JSON-compatible protocol
 - Array index rebasing
 - Garbage collection of client-side operations

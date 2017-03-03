@@ -15,6 +15,10 @@ var actions = {
   stringAdd: 7,
   stringRemove: 8
 };
+var PROTOCOL_PLEASE = 0;
+var PROTOCOL_STATE = 1;
+var PROTOCOL_DELTA = 2;
+var PROTOCOL_SIGNAL = 3;
 
 // The last incrementable integer in IEEE754.
 var MAX_INT = 0x1fffffffffffff;
@@ -320,7 +324,7 @@ Operation.prototype = {
       deltas.push(op.toProtocol());
     }
     // TODO: right now we only support root objects ([]).
-    return [2, [], deltas];
+    return [PROTOCOL_DELTA, [], deltas];
   }
 };
 
@@ -439,12 +443,12 @@ Client.prototype = {
       throw new Error("Invalid Canop message: toplevel is not an array.\n" +
         "Message: " + protocolData);
     }
-    if (protocol[0] === 0) {  // Please
+    if (protocol[0] === PROTOCOL_PLEASE) {
       if (protocol[1] !== 0) {  // Only allow version 0.
         throw new Error("Invalid Canop handshake with protocol version " +
           protocol[1] + "\nMessage: " + protocolData);
       }
-    } else if (protocol[0] === 1) {  // State
+    } else if (protocol[0] === PROTOCOL_STATE) {
       if (protocol[1] === undefined) {  // json
         throw new Error("Invalid Canop message: undefined state\nMessage:" +
           protocolData);
@@ -457,7 +461,7 @@ Client.prototype = {
         throw new Error("Invalid Canop message: non-number " +
           "machine\nMessage: " + protocolData);
       }
-    } else if (protocol[0] === 2) {  // Delta
+    } else if (protocol[0] === PROTOCOL_DELTA) {
       if (!(Object(protocol[1]) instanceof Array)) {
         throw new Error("Invalid Canop message: delta path is not an " +
           "Array.\nMessage: " + protocolData);
@@ -500,6 +504,11 @@ Client.prototype = {
             "Message: " + protocolData);
         }
       }
+    } else if (protocol[0] === PROTOCOL_SIGNAL) {
+      if (typeof protocol[1] !== "number") {  // machine
+        throw new Error("Invalid Canop message: non-number " +
+          "machine\nMessage: " + protocolData);
+      }
     } else {
       throw new Error("Invalid Canop message: unknown message type " +
         protocol[0] + "\nMessage: " + protocolData);
@@ -508,18 +517,22 @@ Client.prototype = {
   },
 
   // Client-side protocol reception.
-  receive: function(protocolData) {
+  receive: function(message) {
     try {
-      var protocol = this.readProtocol(protocolData);
+      var protocol = this.readProtocol(message);
     } catch(e) {
       console.error(e);
       return;
     }
     var messageType = protocol[0];
-    if (messageType === 1) {  // Raw data.
+    if (messageType === PROTOCOL_STATE) {
       this.reset(protocol[1], protocol[2], protocol[3]);
-    } else if (messageType === 2) {  // Diff.
+    } else if (messageType === PROTOCOL_DELTA) {
       this.receiveChange(protocol);
+    } else if (messageType === PROTOCOL_SIGNAL) {
+      this.emit('signal', { machine: protocol[1], data: protocol[2] });
+    } else {
+      console.error("Unknown protocol message " + message);
     }
     this.sendToServer();
   },
@@ -683,35 +696,54 @@ Client.prototype = {
     return this.get([]).toString();
   },
 
+  // Send a signal to all other nodes of the network.
+  // content: JSON-serializable value, sent to other nodes.
+  signal: function(content) {
+    var json = JSON.stringify(content);
+    this.send(JSON.stringify([PROTOCOL_SIGNAL, this.localId, content]));
+  },
+
   // As a server.
 
-  // client: an object with the following fields
+  // newClient: an object with the following fields
   // - send: function(message)
   // - onReceive: function(receive: function(message))
-  addClient: function(client) {
+  addClient: function(newClient) {
     var self = this;
-    client.id = self.nextClientId;
+    newClient.id = self.nextClientId;
     self.nextClientId++;
-    self.clients[client.id] = client;
+    self.clients[newClient.id] = newClient;
 
-    client.onReceive(function receiveFromClient(message) {
+    newClient.onReceive(function receiveFromClient(message) {
       try {
         var protocol = self.readProtocol(message);
       } catch(e) {
         console.error(e);
         return;
       }
-      var change = Operation.fromProtocol(protocol);
-      var canon = self.receiveSent(change);
-      var message = JSON.stringify(canon.toProtocol());
-      for (var clientId in self.clients) {
-        var client = self.clients[clientId];
-        client.send(message);
+      var messageType = protocol[0];
+      if (messageType === PROTOCOL_DELTA) {
+        var change = Operation.fromProtocol(protocol);
+        var canon = self.receiveSent(change);
+        var message = JSON.stringify(canon.toProtocol());
+        for (var clientId in self.clients) {
+          var client = self.clients[clientId];
+          client.send(message);
+        }
+      } else if (messageType === PROTOCOL_SIGNAL) {
+        for (var clientId in self.clients) {
+          if (newClient.id !== +clientId) {
+            var client = self.clients[clientId];
+            client.send(message);
+          }
+        }
+      } else {
+        console.error("Unknown protocol message " + message);
       }
     });
 
     // Send welcome message to new client.
-    client.send(JSON.stringify([1, self.data, self.base, client.id]));
+    newClient.send(JSON.stringify([1, self.data, self.base, newClient.id]));
   },
 
   removeClient: function(client) {
