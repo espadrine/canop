@@ -110,6 +110,14 @@ middle. We hope to implement that. Assuming the swap was performed as a move,
 that would have been enough for this example. Alternatively, you may add a
 custom atomic operation.
 
+# Contributing
+
+```bash
+git clone https://github.com/espadrine/canop.git
+cd canop
+make
+```
+
 # TODO
 
 - Send cursor signals
