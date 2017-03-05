@@ -17,7 +17,7 @@ client.get(['some']);  // 'data'
 client.add(['some'], 0, 'modified ');  // 'modified data'
 client.move([], 'some', ['final']);  // {final: 'modified data'}
 client.on('signal', function(event) { event.machine, event.data });
-client.signal({ name: 'Grace', cursor: ['some', 9] });
+client.signal({ name: 'Grace', focus: ['some'], sel: [[9,9]] });
 
 // This event has the following keys:
 // - changes: Array of [path, action type, parameters…]

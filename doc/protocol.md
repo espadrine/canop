@@ -61,7 +61,7 @@ Server: `[1, json, base, machine]`.
 
 ## Informational
 
-Signaling: `[3, machine, {name: "somenick", cursor: path}]`.
+Signaling: `[3, machine, {name: "somenick", focus: path, sel: ranges}]`.
 
 Recoverable error: `[4, [[code number, "message"], …]]`.
 

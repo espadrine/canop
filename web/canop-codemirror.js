@@ -22,8 +22,12 @@ function CanopCodemirrorHook(editor, options) {
   this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
   this.remoteChange = this.remoteChange.bind(this);
+  this.cursorActivity = this.cursorActivity.bind(this);
+  this.signalReceive = this.signalReceive.bind(this);
 
   this.canopClient.on('change', this.remoteChange);
+  this.canopClient.on('signal', this.signalReceive);
+  this.clientSelectionWidgets = Object.create(null);
   this.connect(options);
 }
 
@@ -71,20 +75,35 @@ CanopCodemirrorHook.prototype = {
     }
   },
 
+  cursorActivity: function CCHcursorActivity(editor) {
+    var self = this;
+    var selections = self.editor.listSelections().map(function(selection) {
+      return [
+        self.editor.indexFromPos(selection.anchor),
+        self.editor.indexFromPos(selection.head),
+      ];
+    });
+    self.canopClient.signal({sel: selections});
+  },
+
   resetEditor: function CCHresetEditor() {
     this.editor.off('change', this.editorChange);
+    this.editor.off('cursorActivity', this.cursorActivity);
     var cursor = this.editor.getCursor();
     this.editor.setValue('' + this.canopClient);
     this.editor.setCursor(cursor);
+    this.editor.on('cursorActivity', this.cursorActivity);
     this.editor.on('change', this.editorChange);
   },
 
   // Takes a list of AtomicOperations and a list of PosChanges.
   updateEditor: function CCHupdateEditor(delta, posChanges) {
     this.editor.off('change', this.editorChange);
+    this.editor.off('cursorActivity', this.cursorActivity);
     var cursor = this.editor.indexFromPos(this.editor.getCursor());
     this.applyDelta(delta);
     this.updateCursor(posChanges, cursor);
+    this.editor.on('cursorActivity', this.cursorActivity);
     this.editor.on('change', this.editorChange);
   },
 
@@ -106,6 +125,99 @@ CanopCodemirrorHook.prototype = {
   updateCursor: function CCHupdateCursor(posChanges, oldCursor) {
     cursor = canop.changePosition(oldCursor, posChanges, true);
     this.editor.setCursor(this.editor.posFromIndex(cursor));
+  },
+
+  // UI management to show selection from other participants.
+
+  signalReceive: function CCHsignalReceive(event) {
+    var machine = event.machine;
+    var data = event.data;
+    this.clientSelectionWidgets[machine] =
+      this.clientSelectionWidgets[machine] || [];
+
+    // Clear existing widgets.
+    var widgets = this.clientSelectionWidgets[machine];
+    for (var i = 0; i < widgets.length; i++) {
+      var widget = widgets[i];
+      widget.clear();
+    }
+
+    // Set new widgets.
+    var selections = data.sel;
+    for (var i = 0; i < selections.length; i++) {
+      var selection = selections[i];
+      // TODO: use a signaled name instead of the machine number.
+      var widgets = this.addSelection(selection, machine);
+      this.clientSelectionWidgets[machine] =
+        this.clientSelectionWidgets[machine].concat(widgets);
+    }
+  },
+
+  // Return a list of widgets that got added.
+  addSelection: function CCHaddSelection(selection, name) {
+    // TODO: support multi-character selections.
+    return [this.addUiCursor(selection[0], name)];
+  },
+
+  // Return the CodeMirror bookmark associated with the cursor.
+  addUiCursor: function CCHaddUiCursor(offset, name) {
+    var pos = this.editor.posFromIndex(offset);
+    var coords = this.editor.cursorCoords(pos);
+    var domCursor = document.createElement("span");
+    domCursor.style.backgroundColor = this.colorFromName(name.toString());
+    domCursor.style.width = "2px";
+    domCursor.style.position = "absolute";
+    domCursor.style.height = (coords.bottom - coords.top) + "px";
+    domCursor.setAttribute("title", name);
+    // TODO: show the name in a colorful rectangle above the cursor.
+    //domCursor.addEventListener("mouseenter", function() {
+    //});
+    //domCursor.addEventListener("mouseleave", function() {
+    //});
+    return this.editor.setBookmark(pos, { widget: domCursor, insertLeft: true });
+  },
+
+  // luma and chroma are between 0 and 1, hue between 0 and 360.
+  // Return a CSS rgb(…) string.
+  rgbFromLch: function CCHrgbFromLch(luma, chroma, hue) {
+    var hue6 = hue / 60;
+    var x = chroma * (1 - Math.abs((hue6 % 2) - 1));
+    var r = 0, g = 0, b = 0;
+    if (hue6 >= 5) {
+      r = chroma; g = 0; b = x;
+    } else if (hue6 >= 4) {
+      r = x; g = 0; b = chroma;
+    } else if (hue6 >= 3) {
+      r = 0; g = x; b = chroma;
+    } else if (hue6 >= 2) {
+      r = 0; g = chroma; b = x;
+    } else if (hue6 >= 1) {
+      r = x; g = chroma; b = 0;
+    } else if (hue6 >= 0) {
+      r = chroma; g = x; b = 0;
+    }
+    var m = luma - (0.3 * r + 0.59 * g + 0.11 * b);
+    r = ((r + m) * 256) | 0;
+    g = ((g + m) * 256) | 0;
+    b = ((b + m) * 256) | 0;
+    return "rgb(" + r + "," + g + "," + b + ")";
+  },
+
+  // name: string. Returns a hue from 0 to 360
+  // Small differences in the string yield very different colors.
+  hueFromName: function CCHcolorFromName(name) {
+    var hue = 0;
+    for (var i = 0; i < name.length; i++) {
+      hue = (hue + name.charCodeAt(i)) % 360;
+    }
+    // 93 is a prime number close to a quarter of 360.
+    return (hue * 93) % 360;
+  },
+
+  // Return a CSS rgb(…) string for each string name, with the same luma, and
+  // such that small differences in the string yield very different colors.
+  colorFromName: function CCHcolorFromName(name) {
+    return this.rgbFromLch(0.7, 0.6, this.hueFromName(name));
   }
 };
 
