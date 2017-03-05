@@ -574,7 +574,7 @@ Client.prototype = {
     this.localId = localId;
     if (!this.disableData) { this.data = data; }
     this.base = base;
-    this.receiveChange([1, [], [[[base, localId, 0], [63, 0, data]]]]);
+    this.receiveChange([PROTOCOL_DELTA, [], [[[base, localId, 0], [actions.set, data]]]]);
   },
   localToSent: function() {
     // Switch all local operations to sent.
