@@ -395,6 +395,7 @@ function Client(params) {
   this.send = params.send || function() {};
   this.clients = {}; // Map from client ids to {send, onReceive}.
   this.nextClientId = 1;
+  this.signalFromClient = Object.create(null);
 }
 exports.Client = Client;
 exports.Server = Client;
@@ -530,7 +531,13 @@ Client.prototype = {
     } else if (messageType === PROTOCOL_DELTA) {
       this.receiveChange(protocol);
     } else if (messageType === PROTOCOL_SIGNAL) {
-      this.emit('signal', { machine: protocol[1], data: protocol[2] });
+      var clientId = protocol[1];
+      var data = protocol[2];
+      this.signalFromClient[clientId] = this.signalFromClient[clientId] || {};
+      for (var key in data) {
+        this.signalFromClient[clientId][key] = data[key];
+      }
+      this.emit('signal', { clientId: clientId, data: data });
     } else {
       console.error("Unknown protocol message " + message);
     }
@@ -731,6 +738,12 @@ Client.prototype = {
           client.send(message);
         }
       } else if (messageType === PROTOCOL_SIGNAL) {
+        var clientId = protocol[1];
+        var data = protocol[2];
+        self.signalFromClient[clientId] = self.signalFromClient[clientId] || {};
+        for (var key in data) {
+          self.signalFromClient[clientId][key] = data[key];
+        }
         for (var clientId in self.clients) {
           if (newClient.id !== +clientId) {
             var client = self.clients[clientId];
@@ -743,7 +756,13 @@ Client.prototype = {
     });
 
     // Send welcome message to new client.
-    newClient.send(JSON.stringify([1, self.data, self.base, newClient.id]));
+    newClient.send(JSON.stringify([PROTOCOL_STATE, self.data, self.base, newClient.id]));
+    for (var clientId in self.clients) {
+      if (self.signalFromClient[clientId] !== undefined) {
+        newClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId,
+          self.signalFromClient[clientId]]));
+      }
+    }
   },
 
   removeClient: function(client) {

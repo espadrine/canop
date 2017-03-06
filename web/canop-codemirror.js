@@ -130,13 +130,13 @@ CanopCodemirrorHook.prototype = {
   // UI management to show selection from other participants.
 
   signalReceive: function CCHsignalReceive(event) {
-    var machine = event.machine;
+    var clientId = event.clientId;
     var data = event.data;
-    this.clientSelectionWidgets[machine] =
-      this.clientSelectionWidgets[machine] || [];
+    this.clientSelectionWidgets[clientId] =
+      this.clientSelectionWidgets[clientId] || [];
 
     // Clear existing widgets.
-    var widgets = this.clientSelectionWidgets[machine];
+    var widgets = this.clientSelectionWidgets[clientId];
     for (var i = 0; i < widgets.length; i++) {
       var widget = widgets[i];
       widget.clear();
@@ -146,10 +146,10 @@ CanopCodemirrorHook.prototype = {
     var selections = data.sel;
     for (var i = 0; i < selections.length; i++) {
       var selection = selections[i];
-      // TODO: use a signaled name instead of the machine number.
-      var widgets = this.addSelection(selection, machine);
-      this.clientSelectionWidgets[machine] =
-        this.clientSelectionWidgets[machine].concat(widgets);
+      // TODO: use a signaled name instead of the clientId.
+      var widgets = this.addSelection(selection, clientId);
+      this.clientSelectionWidgets[clientId] =
+        this.clientSelectionWidgets[clientId].concat(widgets);
     }
   },
 
