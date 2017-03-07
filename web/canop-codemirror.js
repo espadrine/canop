@@ -164,16 +164,26 @@ CanopCodemirrorHook.prototype = {
     var pos = this.editor.posFromIndex(offset);
     var coords = this.editor.cursorCoords(pos);
     var domCursor = document.createElement("span");
-    domCursor.style.backgroundColor = this.colorFromName(name.toString());
+    var color = this.colorFromName(name.toString());
+    domCursor.style.backgroundColor = color;
     domCursor.style.width = "2px";
+    domCursor.style.marginLeft = "-1px";
     domCursor.style.position = "absolute";
     domCursor.style.height = (coords.bottom - coords.top) + "px";
-    domCursor.setAttribute("title", name);
-    // TODO: show the name in a colorful rectangle above the cursor.
-    //domCursor.addEventListener("mouseenter", function() {
-    //});
-    //domCursor.addEventListener("mouseleave", function() {
-    //});
+    // Show the name in a colorful rectangle above the cursor.
+    var domName = document.createElement("span");
+    domName.style.display = "none";
+    domName.style.padding = "0 0.7em";
+    domName.style.borderRadius = "3px";
+    domName.style.backgroundColor = color;
+    domName.textContent = name;
+    domCursor.appendChild(domName);
+    domCursor.addEventListener("mouseenter", function() {
+      domName.style.display = "inline";
+    });
+    domCursor.addEventListener("mouseleave", function() {
+      domName.style.display = "none";
+    });
     return this.editor.setBookmark(pos, { widget: domCursor, insertLeft: true });
   },
 
