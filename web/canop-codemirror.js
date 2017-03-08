@@ -79,8 +79,8 @@ CanopCodemirrorHook.prototype = {
     var self = this;
     var selections = self.editor.listSelections().map(function(selection) {
       return [
-        self.editor.indexFromPos(selection.anchor),
         self.editor.indexFromPos(selection.head),
+        self.editor.indexFromPos(selection.anchor),
       ];
     });
     self.canopClient.signal({sel: selections});
@@ -156,7 +156,11 @@ CanopCodemirrorHook.prototype = {
   // Return a list of widgets that got added.
   addSelection: function CCHaddSelection(selection, name) {
     // TODO: support multi-character selections.
-    return [this.addUiCursor(selection[0], name)];
+    var widgets = [this.addUiCursor(selection[0], name)];
+    if (selection[0] !== selection[1]) {
+      widgets.push(this.addUiSelection(selection, name));
+    }
+    return widgets;
   },
 
   // Return the CodeMirror bookmark associated with the cursor.
@@ -185,6 +189,23 @@ CanopCodemirrorHook.prototype = {
       domName.style.display = "none";
     });
     return this.editor.setBookmark(pos, { widget: domCursor, insertLeft: true });
+  },
+
+  // selection: list of two offsets.
+  // Returns a CodeMirror mark.
+  addUiSelection: function CCHaddUiSelection(selection, name) {
+    var color = this.colorFromName(name.toString(), 0.9);
+    if (selection[0] < selection[1]) {
+      var startIdx = selection[0];
+      var endIdx = selection[1];
+    } else {
+      var startIdx = selection[1];
+      var endIdx = selection[0];
+    }
+    var startPos = this.editor.posFromIndex(startIdx);
+    var endPos = this.editor.posFromIndex(endIdx);
+    return this.editor.markText(startPos, endPos,
+      {css: "background-color:" + color});
   },
 
   // luma and chroma are between 0 and 1, hue between 0 and 360.
@@ -226,8 +247,9 @@ CanopCodemirrorHook.prototype = {
 
   // Return a CSS rgb(…) string for each string name, with the same luma, and
   // such that small differences in the string yield very different colors.
-  colorFromName: function CCHcolorFromName(name) {
-    return this.rgbFromLch(0.7, 0.6, this.hueFromName(name));
+  colorFromName: function CCHcolorFromName(name, luma) {
+    if (luma === undefined) { luma = 0.7; }
+    return this.rgbFromLch(luma, 0.6, this.hueFromName(name));
   }
 };
 

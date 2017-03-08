@@ -16,7 +16,9 @@ server.addClient({
 client.get(['some']);  // 'data'
 client.add(['some'], 0, 'modified ');  // 'modified data'
 client.move([], 'some', ['final']);  // {final: 'modified data'}
-client.on('signal', function(event) { event.machine, event.data });
+client.on('signal', function(event) { event.clientId, event.data });
+// Typically, sel is a list of selection ranges, where the first offset is the
+// cursor (which moves the selection with shift+arrow).
 client.signal({ name: 'Grace', focus: ['some'], sel: [[9,9]] });
 
 // This event has the following keys:
@@ -120,8 +122,6 @@ make
 
 # TODO
 
-- Send cursor signals
-- Show other cursors
 - Automatic reconnection
 - JSON-compatible protocol
 - Array index rebasing
