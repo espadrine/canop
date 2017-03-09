@@ -766,7 +766,20 @@ Client.prototype = {
   },
 
   removeClient: function(client) {
-    delete this.clients[client.id];
+    var clientId = client.id;
+    delete this.clients[clientId];
+    // Send a reset signal to all clients.
+    var signals = this.signalFromClient[clientId];
+    if (signals !== undefined) {
+      for (var key in signals) {
+        signals[key] = null;
+      }
+      for (var aClientId in this.clients) {
+        var aClient = this.clients[aClientId];
+        aClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId, signals]));
+      }
+    }
+    delete this.signalFromClient[clientId];
   },
 
   // Return a list of atomic operations.
