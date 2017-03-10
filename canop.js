@@ -440,7 +440,7 @@ Client.prototype = {
           "Message: " + protocolData);
       }
     }
-    if (!(Object(protocol) instanceof Array)) {
+    if (!(protocol instanceof Array)) {
       throw new Error("Invalid Canop message: toplevel is not an array.\n" +
         "Message: " + protocolData);
     }
@@ -463,17 +463,17 @@ Client.prototype = {
           "machine\nMessage: " + protocolData);
       }
     } else if (protocol[0] === PROTOCOL_DELTA) {
-      if (!(Object(protocol[1]) instanceof Array)) {
+      if (!(protocol[1] instanceof Array)) {
         throw new Error("Invalid Canop message: delta path is not an " +
           "Array.\nMessage: " + protocolData);
       }
-      if (!(Object(protocol[2]) instanceof Array)) {
+      if (!(protocol[2] instanceof Array)) {
         throw new Error("Invalid Canop message: deltas are not an " +
           "Array.\nMessage: " + protocolData);
       }
       for (var i = 0; i < protocol[2].length; i++) {
         var delta = protocol[2][i];
-        if (!(Object(delta[0]) instanceof Array)) {
+        if (!(delta[0] instanceof Array)) {
           throw new Error("Invalid Canop message: delta " + i +
             " has non-Array mark.\nMessage: " + protocolData);
         }
@@ -484,7 +484,7 @@ Client.prototype = {
               "Message: " + protocolData);
           }
         }
-        if (!(Object(delta[1]) instanceof Array)) {
+        if (!(delta[1] instanceof Array)) {
           throw new Error("Invalid Canop message: delta " + i +
             " has non-Array operation.\nMessage: " + protocolData);
         }
@@ -508,7 +508,12 @@ Client.prototype = {
     } else if (protocol[0] === PROTOCOL_SIGNAL) {
       if (typeof protocol[1] !== "number") {  // machine
         throw new Error("Invalid Canop message: non-number " +
-          "machine\nMessage: " + protocolData);
+          "machine.\nMessage: " + protocolData);
+      }
+      if ((protocol[2] !== undefined) && ((typeof protocol[2] !== 'object') ||
+        (protocol[2] instanceof Array))) {  // signal
+        throw new Error("Invalid Canop message: non-object " +
+          "signal.\nMessage: " + protocolData);
       }
     } else {
       throw new Error("Invalid Canop message: unknown message type " +
@@ -534,8 +539,10 @@ Client.prototype = {
       var clientId = protocol[1];
       var data = protocol[2];
       this.signalFromClient[clientId] = this.signalFromClient[clientId] || {};
-      for (var key in data) {
-        this.signalFromClient[clientId][key] = data[key];
+      if (data !== undefined) {
+        for (var key in data) {
+          this.signalFromClient[clientId][key] = data[key];
+        }
       }
       this.emit('signal', { clientId: clientId, data: data });
     } else {
@@ -741,8 +748,10 @@ Client.prototype = {
         var clientId = protocol[1];
         var data = protocol[2];
         self.signalFromClient[clientId] = self.signalFromClient[clientId] || {};
-        for (var key in data) {
-          self.signalFromClient[clientId][key] = data[key];
+        if (data !== undefined) {
+          for (var key in data) {
+            self.signalFromClient[clientId][key] = data[key];
+          }
         }
         for (var clientId in self.clients) {
           if (newClient.id !== +clientId) {
@@ -769,15 +778,9 @@ Client.prototype = {
     var clientId = client.id;
     delete this.clients[clientId];
     // Send a reset signal to all clients.
-    var signals = this.signalFromClient[clientId];
-    if (signals !== undefined) {
-      for (var key in signals) {
-        signals[key] = null;
-      }
-      for (var aClientId in this.clients) {
-        var aClient = this.clients[aClientId];
-        aClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId, signals]));
-      }
+    for (var aClientId in this.clients) {
+      var aClient = this.clients[aClientId];
+      aClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId]));
     }
     delete this.signalFromClient[clientId];
   },

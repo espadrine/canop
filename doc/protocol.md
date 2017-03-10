@@ -62,6 +62,8 @@ Server: `[1, json, base, machine]`.
 ## Informational
 
 Signaling: `[3, machine, {name: "somenick", focus: path, sel: ranges}]`.
+(The third element is an object. Having no third element means the client
+disconnected.)
 
 Recoverable error: `[4, [[code number, "message"], …]]`.
 

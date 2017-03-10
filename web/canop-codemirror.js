@@ -143,13 +143,15 @@ CanopCodemirrorHook.prototype = {
     }
 
     // Set new widgets.
-    var selections = data.sel;
-    for (var i = 0; i < selections.length; i++) {
-      var selection = selections[i];
-      // TODO: use a signaled name instead of the clientId.
-      var widgets = this.addSelection(selection, clientId);
-      this.clientSelectionWidgets[clientId] =
-        this.clientSelectionWidgets[clientId].concat(widgets);
+    if (data !== undefined && data.sel !== undefined) {
+      var selections = data.sel;
+      for (var i = 0; i < selections.length; i++) {
+        var selection = selections[i];
+        // TODO: use a signaled name instead of the clientId.
+        var widgets = this.addSelection(selection, clientId);
+        this.clientSelectionWidgets[clientId] =
+          this.clientSelectionWidgets[clientId].concat(widgets);
+      }
     }
   },
 
