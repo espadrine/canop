@@ -8,9 +8,13 @@
 <script>
 var editor = CodeMirror(document.body);
 var shared = new CanopCodemirrorHook(editor, {
-  open: function() { console.log('socket opened'); },
-  close: function() { console.log('socket closed'); },
-  error: function() { console.log('socket errored'); },
+  url: "ws://" + window.location.host + "/$websocket:text",
+  open: function() { console.log('websocket open'); },
+  close: function() { console.log('websocket close'); },
+  error: function() { console.log('websocket error'); },
 });
+shared.canopClient.on('synced', function() { console.log('synced'); });
+shared.canopClient.on('syncing', function() { console.log('syncing'); });
+shared.canopClient.on('unsyncable', function() { console.log('unsyncable'); });
 </script>
 </body>

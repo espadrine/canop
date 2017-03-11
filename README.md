@@ -7,6 +7,7 @@ Currently only supports string values.
 ```js
 var canop = require('canop');
 var server = new canop.Server({ data: {some: 'data'} });
+// send must throw if it cannot send the message.
 var client = new canop.Client({ send: function(message) {}, });
 server.addClient({
   send: function(message) { client.receive(message); },
@@ -40,6 +41,9 @@ client.on('synced', function() {});
 client.on('syncing', function() {});
 // When we cannot send operations to the server.
 client.on('unsyncable', function() {});
+// You must emit unsyncable when the connection is closed,
+// and syncing when it opens:
+client.emit('syncing');
 
 // Return a position (eg. the index of a cursor in a string) corresponding to an
 // initial position, mapped through a sequence of changes. You can get an
@@ -122,7 +126,6 @@ make
 
 # TODO
 
-- Automatic reconnection
 - JSON-compatible protocol
 - Array index rebasing
 - Garbage collection of client-side operations

@@ -2,22 +2,36 @@
 
 var canop = exports.canop;
 
+// editor: a CodeMirror instance.
+// options:
+// - url: location of websocket. Defaults to ws://<dns>/websocket.
+// - error: function triggered when the websocket errors.
+// - open: function triggered when the websocket opens.
+// - close: function triggered when the websocket closes.
+//   (You can also rely on .canopClient.on('unsyncable', …)
+// - reconnect: if true, automatically reconnect when disconnected.
 function CanopCodemirrorHook(editor, options) {
   options = options || {};
-  options.channelName = options.channelName || 'text';
+  options.url = options.url ||
+    // Trick: use the end of either http: or https:.
+    'ws' + window.location.protocol.slice(4) + '//' +
+    window.location.host + '/websocket';
 
   this.editor = editor;
   var self = this;
   this.canopClient = new canop.Client({
     send: function(msg) {
-      if (self.socket === undefined) {
-        throw new Error('Socket not initialized but data is sent through it');
+      if (self.socket === undefined ||
+          self.socket.readyState !== WebSocket.OPEN) {
+        throw new Error("WebSocket is not open for business");
       }
       self.socket.send(msg);
-    },
+    }
   });
-  this.channelName = options.channelName;
+  this.url = "" + options.url;
   this.socket = null;
+  this.reconnect = (options.reconnect === undefined)? true: !!options.reconnect;
+  this.reconnectionInterval = 256;  // in ms. Increases exponentially to 10min.
 
   this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
@@ -33,21 +47,26 @@ function CanopCodemirrorHook(editor, options) {
 
 CanopCodemirrorHook.prototype = {
   connect: function CCHconnect(options) {
+    console.log('Connecting…');
     var self = this;
-    this.socket = new WebSocket(
-      // Trick: use the end of either http: or https:.
-      'ws' + window.location.protocol.slice(4) + '//' +
-        window.location.host +
-        '/$websocket:' + this.channelName);
-
+    this.socket = new WebSocket(this.url);
     this.socket.addEventListener('message', this.socketReceive);
-    this.socket.addEventListener('error', options.error);
-    this.socket.addEventListener('close', options.close);
-    this.socket.addEventListener('open', options.open);
     this.socket.addEventListener('close', function(e) {
-      self.canopClient.emit('unsyncable', e);
+      self.canopClient.emit('unsyncable');
+      if (self.reconnect) {
+        setTimeout(function() { self.connect(options); },
+          self.reconnectionInterval);
+        if (self.reconnectionInterval <= 1000 * 60 * 10) {
+          self.reconnectionInterval *= 2;
+        }
+      }
     });
-    // TODO: Automatic reconnection.
+    this.socket.addEventListener('open', function() {
+      self.canopClient.emit('syncing');
+    });
+    this.socket.addEventListener('error', options.error);
+    this.socket.addEventListener('open', options.open);
+    this.socket.addEventListener('close', options.close);
   },
 
   socketReceive: function CCHsocketReceive(event) {
@@ -157,7 +176,6 @@ CanopCodemirrorHook.prototype = {
 
   // Return a list of widgets that got added.
   addSelection: function CCHaddSelection(selection, name) {
-    // TODO: support multi-character selections.
     var widgets = [this.addUiCursor(selection[0], name)];
     if (selection[0] !== selection[1]) {
       widgets.push(this.addUiSelection(selection, name));

@@ -6,7 +6,13 @@ Aims:
 - Can edit any JSON data
 - Allow adding future operations
 
-General form:
+## Handshake
+
+Client: `[0, protocol version]`.
+
+Server: `[1, json, base, machine]`.
+
+## Change
 
 ```js
 [2, path, deltas]
@@ -53,12 +59,6 @@ Delta for numbers: [10, number] representing an addition,
 
 Delta for booleans: [20] to set, 21 to reset, 22 to toggle.
 
-## Handshake
-
-Client: `[0, protocol version]`.
-
-Server: `[1, json, base, machine]`.
-
 ## Informational
 
 Signaling: `[3, machine, {name: "somenick", focus: path, sel: ranges}]`.
@@ -67,6 +67,12 @@ disconnected.)
 
 Recoverable error: `[4, [[code number, "message"], …]]`.
 
+- 0 "Invalid protocol request"
+- 1 "Unknown base": when a server doesn't have the base for which operations are
+  requested. Solved by asking for the origin.
+
 Unrecoverable error: `[5, [[code number, "message"], …]]`. Reinitialize.
+
+- 0 "Unsupported protocol version"
 
 Request operations since a given base: `[6, machine, base]`.
