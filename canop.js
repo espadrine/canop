@@ -23,6 +23,8 @@ var PROTOCOL_SIGNAL = 3;
 var PROTOCOL_WARNING = 4;
 var PROTOCOL_ERROR = 5;
 var PROTOCOL_SINCE = 6;
+var PROTOCOL_DELTA_SINCE = 7;
+var PROTOCOL_WARN_UNKNOWN_BASE = 0;
 
 // The last incrementable integer in IEEE754.
 var MAX_INT = 0x1fffffffffffff;
@@ -360,6 +362,11 @@ function equalMark(mark1, mark2) {
   return true;
 }
 
+// Client states
+var STATE_UNSYNCABLE = 0; // Disconnected.
+var STATE_LOADING = 1;    // Connected, but not ready to exchange diffs.
+var STATE_READY = 2;      // Ready to exchange diffs.
+
 // params: an object
 // - data: content of the root canonical operation.
 // - base: integer identifying the root canonical operation.
@@ -402,11 +409,10 @@ function Client(params) {
   this.nextClientId = 1;
   this.signalFromClient = Object.create(null);
 
-  this.unsyncable = false;
+  this.clientState = STATE_UNSYNCABLE;
   if (!this.isServer) {
-    this.on('unsyncable', function() {
-      if (self.unsyncable) { return; }
-      self.unsyncable = true;
+    var whenUnsyncable = function() {
+      self.clientState = STATE_UNSYNCABLE;
       self.once('syncing', function() {
         try {
           if (self.localId === 0) {
@@ -414,12 +420,17 @@ function Client(params) {
           } else {
             self.send(JSON.stringify([PROTOCOL_SINCE, self.localId, self.base]));
           }
-          self.unsyncable = false;
+          self.clientState = STATE_LOADING;
         } catch(e) {
           self.emit('unsyncable', e);
         }
       });
+    };
+    this.on('unsyncable', function() {
+      if (self.clientState === STATE_UNSYNCABLE) { return; }
+      whenUnsyncable();
     });
+    whenUnsyncable();
     try {
       this.send(JSON.stringify([PROTOCOL_PLEASE, PROTOCOL_VERSION]));
     } catch(e) {
@@ -551,6 +562,18 @@ Client.prototype = {
         throw new Error("Invalid Canop message: non-object " +
           "signal.\nMessage: " + protocolData);
       }
+    } else if ((protocol[0] === PROTOCOL_WARNING) ||
+        (protocol[0] === PROTOCOL_ERROR)) {
+      protocol[1].forEach(function(error) {
+        if (typeof error[0] !== "number") {  // error code
+          throw new Error("Invalid Canop message: non-number " +
+            "error code.\nMessage: " + protocolData);
+        }
+        if (typeof error[1] !== "string") {  // error message
+          throw new Error("Invalid Canop message: non-string " +
+            "error message.\nMessage: " + protocolData);
+        }
+      });
     } else if (protocol[0] === PROTOCOL_SINCE) {
       if (typeof protocol[1] !== "number") {  // machine
         throw new Error("Invalid Canop message: non-number " +
@@ -569,6 +592,7 @@ Client.prototype = {
 
   // Client-side protocol reception.
   receive: function(message) {
+    var self = this;
     try {
       var protocol = this.readProtocol(message);
     } catch(e) {
@@ -578,9 +602,18 @@ Client.prototype = {
     var messageType = protocol[0];
     if (messageType === PROTOCOL_STATE) {
       this.reset(protocol[1], protocol[2], protocol[3]);
-    } else if (messageType === PROTOCOL_DELTA) {
+      this.clientState = STATE_READY;
+      this.sendToServer();
+    } else if (messageType === PROTOCOL_DELTA_SINCE) {
       this.receiveChange(protocol);
+      this.clientState = STATE_READY;
+      this.sendToServer();
+    } else if (messageType === PROTOCOL_DELTA) {
+      if (this.clientState !== STATE_READY) { return; }
+      this.receiveChange(protocol);
+      this.sendToServer();
     } else if (messageType === PROTOCOL_SIGNAL) {
+      if (this.clientState !== STATE_READY) { return; }
       var clientId = protocol[1];
       var data = protocol[2];
       this.signalFromClient[clientId] = this.signalFromClient[clientId] || {};
@@ -590,10 +623,19 @@ Client.prototype = {
         }
       }
       this.emit('signal', { clientId: clientId, data: data });
+    } else if (messageType === PROTOCOL_WARNING) {
+      protocol[1].forEach(function(error) {
+        if (error[0] === PROTOCOL_WARN_UNKNOWN_BASE) {
+          // FIXME: fetch a fully copy, show the user what will happen if their
+          // local changes are applied on top of if.
+          self.emit('unsyncable');
+        }
+      });
+    } else if (messageType === PROTOCOL_ERROR) {
+      protocol[1].forEach(function(error) { console.error(error); });
     } else {
       console.error("Unknown protocol message " + message);
     }
-    this.sendToServer();
   },
   // Emit change / localChange events using their proper formats.
   // eventName: either 'change' or 'localChange'.
@@ -703,7 +745,8 @@ Client.prototype = {
   },
 
   sendToServer: function sendToServer() {
-    if (this.unsyncable) { return; }
+    if (this.clientState === STATE_UNSYNCABLE ||
+        this.clientState === STATE_LOADING) { return; }
     if (this.sent.list.length > 0) { return; }
     if (this.local.list.length > 0) {
       this.emit('syncing');
@@ -775,6 +818,7 @@ Client.prototype = {
   // Send a signal to all other nodes of the network.
   // content: JSON-serializable value, sent to other nodes.
   signal: function(content) {
+    if (this.clientState !== STATE_READY) { return; }
     var json = JSON.stringify(content);
     try {
       this.send(JSON.stringify([PROTOCOL_SIGNAL, this.localId, content]));
@@ -791,6 +835,7 @@ Client.prototype = {
   addClient: function(newClient) {
     var self = this;
     newClient.id = self.nextClientId;
+    newClient.base = 0;
     self.nextClientId++;
     self.clients[newClient.id] = newClient;
 
@@ -808,21 +853,26 @@ Client.prototype = {
           newClient.send(JSON.stringify([PROTOCOL_ERROR,
             [[0, "Unsupported protocol version"]]]));
         } else {
+          newClient.base = self.base;
           newClient.send(JSON.stringify([PROTOCOL_STATE, self.data, self.base,
             newClient.id]));
         }
       } else if (messageType === PROTOCOL_SINCE) {
+        var base = protocol[2];
         self.removeClient(newClient);
         newClient.id = protocol[1];
+        newClient.base = base;
         self.clients[newClient.id] = newClient;
-        var deltas = self.operationsSinceBase(protocol[2]);
+        var deltas = self.operationsSinceBase(base);
         if (deltas !== undefined) {
           var op = new Operation(deltas);
+          var protoDeltas = deltas.map(function(aop) { return aop.toProtocol(); });
           // TODO: right now we only support root objects ([]).
-          newClient.send(JSON.stringify(op.toProtocol()));
+          newClient.send(JSON.stringify([PROTOCOL_DELTA_SINCE, [],
+            protoDeltas]));
         } else {
           newClient.send(JSON.stringify([PROTOCOL_WARNING,
-            [[1, "Unknown base"]]]));
+            [[PROTOCOL_WARN_UNKNOWN_BASE, "Unknown base"]]]));
         }
       } else if (messageType === PROTOCOL_DELTA) {
         var change = Operation.fromProtocol(protocol);
@@ -952,9 +1002,25 @@ Client.prototype = {
     }
     this.canon.apply(sent);
     this.emitChanges('change', sent.list, posChanges);
+    // Clean up the canon operations that every connected user has.
+    this.removeCommonOps();
     return sent;
   },
 
+  removeCommonOps: function() {
+    var earliestClientBase = this.base;
+    for (var clientId in this.clients) {
+      var client = this.clients[clientId];
+      var clientIsNotInitialized = (client.base === 0);
+      var baseIsEarlier = client.base < earliestClientBase;
+      if (clientIsNotInitialized && baseIsEarlier) {
+        earliestClientBase = client.base;
+      }
+    }
+    // Index in canon of the earliestClientBase operation.
+    var baseIdx = this.canon.list.length - (this.base - earliestClientBase);
+    this.canon.list = this.canon.list.slice(baseIdx - 1);
+  },
 };
 
 exports.operationFromProtocol = Operation.fromProtocol;

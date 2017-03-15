@@ -1,6 +1,7 @@
 (function(exports, undefined) {
 
 var canop = exports.canop;
+var RECONNECTION_INTERVAL = 256;  // in ms. Increases exponentially to 10min.
 
 // editor: a CodeMirror instance.
 // options:
@@ -31,7 +32,7 @@ function CanopCodemirrorHook(editor, options) {
   this.url = "" + options.url;
   this.socket = null;
   this.reconnect = (options.reconnect === undefined)? true: !!options.reconnect;
-  this.reconnectionInterval = 256;  // in ms. Increases exponentially to 10min.
+  this.reconnectionInterval = RECONNECTION_INTERVAL;
 
   this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
@@ -62,6 +63,7 @@ CanopCodemirrorHook.prototype = {
       }
     });
     this.socket.addEventListener('open', function() {
+      self.reconnectionInterval = RECONNECTION_INTERVAL;
       self.canopClient.emit('syncing');
     });
     this.socket.addEventListener('error', options.error);

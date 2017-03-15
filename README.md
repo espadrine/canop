@@ -14,6 +14,10 @@ server.addClient({
   onReceive: function(receive) { client.send = receive; },
 });
 
+// You must emit syncing when the connection opens,
+// and unsyncable when it closes.
+client.emit('syncing');
+
 client.get(['some']);  // 'data'
 client.add(['some'], 0, 'modified ');  // 'modified data'
 client.move([], 'some', ['final']);  // {final: 'modified data'}
@@ -41,9 +45,6 @@ client.on('synced', function() {});
 client.on('syncing', function() {});
 // When we cannot send operations to the server.
 client.on('unsyncable', function() {});
-// You must emit unsyncable when the connection is closed,
-// and syncing when it opens:
-client.emit('syncing');
 
 // Return a position (eg. the index of a cursor in a string) corresponding to an
 // initial position, mapped through a sequence of changes. You can get an

@@ -76,3 +76,4 @@ Unrecoverable error: `[5, [[code number, "message"], …]]`. Reinitialize.
 - 0 "Unsupported protocol version"
 
 Request operations since a given base: `[6, machine, base]`.
+Responded to with a `[7, path, deltas]`.

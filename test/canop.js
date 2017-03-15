@@ -26,6 +26,7 @@ function Star(data, n) {
       send: function(message) { node.messages.push(message); },
       onReceive: function(receive) { client.send = receive; },
     });
+    client.emit('syncing');
     sendChange(this, i);
   }
 }
