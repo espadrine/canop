@@ -404,38 +404,33 @@ function Client(params) {
     this.isServer = false;
   }
 
-  this.send = params.send || function() {};
+  this.send = params.send || function() {
+    throw 'Default Canop send operation';
+  };
   this.clients = {}; // Map from client ids to {send, onReceive}.
   this.nextClientId = 1;
   this.signalFromClient = Object.create(null);
 
   this.clientState = STATE_UNSYNCABLE;
   if (!this.isServer) {
-    var whenUnsyncable = function() {
-      self.clientState = STATE_UNSYNCABLE;
-      self.once('syncing', function() {
-        try {
-          if (self.localId === 0) {
-            self.send(JSON.stringify([PROTOCOL_PLEASE, PROTOCOL_VERSION]));
-          } else {
-            self.send(JSON.stringify([PROTOCOL_SINCE, self.localId, self.base]));
-          }
-          self.clientState = STATE_LOADING;
-        } catch(e) {
-          self.emit('unsyncable', e);
+    var initiateLoading = function() {
+      try {
+        if (self.localId === 0) {
+          self.send(JSON.stringify([PROTOCOL_PLEASE, PROTOCOL_VERSION]));
+        } else {
+          self.send(JSON.stringify([PROTOCOL_SINCE, self.localId, self.base]));
         }
-      });
+        self.clientState = STATE_LOADING;
+      } catch(e) {
+        self.emit('unsyncable', e);
+      }
     };
     this.on('unsyncable', function() {
       if (self.clientState === STATE_UNSYNCABLE) { return; }
-      whenUnsyncable();
+      self.clientState = STATE_UNSYNCABLE;
+      self.once('syncing', initiateLoading);
     });
-    whenUnsyncable();
-    try {
-      this.send(JSON.stringify([PROTOCOL_PLEASE, PROTOCOL_VERSION]));
-    } catch(e) {
-      this.emit('unsyncable', e);
-    }
+    self.once('syncing', initiateLoading);
   }
 }
 exports.Client = Client;
@@ -509,7 +504,8 @@ Client.prototype = {
         throw new Error("Invalid Canop message: non-number " +
           "machine\nMessage: " + protocolData);
       }
-    } else if (protocol[0] === PROTOCOL_DELTA) {
+    } else if (protocol[0] === PROTOCOL_DELTA ||
+               protocol[0] === PROTOCOL_DELTA_SINCE) {
       if (!(protocol[1] instanceof Array)) {
         throw new Error("Invalid Canop message: delta path is not an " +
           "Array.\nMessage: " + protocolData);
