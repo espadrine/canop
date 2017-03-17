@@ -853,6 +853,7 @@ Client.prototype = {
           newClient.send(JSON.stringify([PROTOCOL_STATE, self.data, self.base,
             newClient.id]));
         }
+        self.sendSignalsToClient(newClient);
       } else if (messageType === PROTOCOL_SINCE) {
         var base = protocol[2];
         self.removeClient(newClient);
@@ -870,6 +871,7 @@ Client.prototype = {
           newClient.send(JSON.stringify([PROTOCOL_WARNING,
             [[PROTOCOL_WARN_UNKNOWN_BASE, "Unknown base"]]]));
         }
+        self.sendSignalsToClient(newClient);
       } else if (messageType === PROTOCOL_DELTA) {
         var change = Operation.fromProtocol(protocol);
         var canon = self.receiveSent(change);
@@ -897,12 +899,14 @@ Client.prototype = {
         console.error("Unknown protocol message " + message);
       }
     });
+  },
 
-    // Send known signals to new client.
-    for (var clientId in self.clients) {
-      if (self.signalFromClient[clientId] !== undefined) {
-        newClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId,
-          self.signalFromClient[clientId]]));
+  // Send aggregated signals from other clients to this client.
+  sendSignalsToClient: function(client) {
+    for (var clientId in this.clients) {
+      if (this.signalFromClient[clientId] !== undefined) {
+        client.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId,
+          this.signalFromClient[clientId]]));
       }
     }
   },
