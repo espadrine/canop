@@ -1011,15 +1011,17 @@ Client.prototype = {
     var earliestClientBase = this.base;
     for (var clientId in this.clients) {
       var client = this.clients[clientId];
-      var clientIsNotInitialized = (client.base === 0);
+      var clientIsInitialized = (client.base !== 0);
       var baseIsEarlier = client.base < earliestClientBase;
-      if (clientIsNotInitialized && baseIsEarlier) {
+      if (clientIsInitialized && baseIsEarlier) {
         earliestClientBase = client.base;
       }
     }
     // Index in canon of the earliestClientBase operation.
     var baseIdx = this.canon.list.length - (this.base - earliestClientBase);
-    this.canon.list = this.canon.list.slice(baseIdx - 1);
+    if (baseIdx > 0) {
+      this.canon.list = this.canon.list.slice(baseIdx - 1);
+    }
   },
 };
 
