@@ -66,9 +66,9 @@ CanopCodemirrorHook.prototype = {
       self.reconnectionInterval = RECONNECTION_INTERVAL;
       self.canopClient.emit('syncing');
     });
-    this.socket.addEventListener('error', options.error);
-    this.socket.addEventListener('open', options.open);
-    this.socket.addEventListener('close', options.close);
+    if (options.error) { this.socket.addEventListener('error', options.error); }
+    if (options.open) { this.socket.addEventListener('open', options.open); }
+    if (options.close) { this.socket.addEventListener('close', options.close); }
   },
 
   socketReceive: function CCHsocketReceive(event) {
@@ -80,19 +80,23 @@ CanopCodemirrorHook.prototype = {
     this.updateEditor(event.changes, event.posChanges);
   },
 
-  editorChange: function CCHeditorChange(editor, change) {
+  editorChange: function CCHeditorChange(editor, change, actions) {
+    var actions = actions || [];
     var from = change.from;
     var to = change.to;
-    var text = change.text.join('\n');
+    var added = change.text.join('\n');
     var removed = change.removed.join('\n');
+    var fromIdx = editor.indexFromPos(from);
     if (removed.length > 0) {
-      this.canopClient.remove([], editor.indexFromPos(from), removed);
+      actions.push([canop.action.stringRemove, [], fromIdx, removed]);
     }
-    if (text.length > 0) {
-      this.canopClient.add([], editor.indexFromPos(from), text);
+    if (added.length > 0) {
+      actions.push([canop.action.stringAdd, [], fromIdx, added]);
     }
     if (change.next) {
-      this.editorChange(editor, change.next);
+      this.editorChange(editor, change.next, actions);
+    } else {
+      this.canopClient.actAtomically(actions);
     }
   },
 

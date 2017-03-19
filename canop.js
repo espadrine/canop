@@ -795,20 +795,62 @@ Client.prototype = {
   },
   add: function addOp(path, key, value) {
     // TODO: find object at the correct path.
-    // TODO: localChange, localUpdate events.
-    var aop = this.local.add(path, key, value, this.base, this.localId);
-    this.emitChanges('localChange', [aop]);
+    this.act([actions.stringAdd, path, key, value]);
     this.sendToServer();
   },
   remove: function removeOp(path, key, value) {
     // TODO: find object at the correct path.
     // TODO: localChange, localUpdate events.
-    var aop = this.local.remove(path, key, value, this.base, this.localId);
-    this.emitChanges('localChange', [aop]);
+    this.act([actions.stringRemove, path, key, value]);
     this.sendToServer();
   },
   toString: function() {
     return this.get([]).toString();
+  },
+
+  // action: [actions.*, path, …params]
+  // path: list of keys (string or integer) to the object that receive the
+  //   operation.
+  act: function(action) {
+    var aops = this.commitAction(action);
+    // TODO: localUpdate event.
+    this.emitChanges('localChange', aops);
+    this.sendToServer();
+  },
+  // actions: list of [actionType, path, …params].
+  actAtomically: function(actions) {
+    var aops = [];
+    for (var i = 0; i < actions.length; i++) {
+      aops = aops.concat(this.commitAction(actions[i]));
+    }
+    this.emitChanges('localChange', aops);
+    this.sendToServer();
+  },
+  // action: [actions.*, path, …params]
+  // Return a list of AtomicOperations.
+  commitAction: function(action) {
+    var actionType = action[0];
+    var aops = [];  // AtomicOperations
+    if (actionType === actions.stringAdd) {
+      aops.push(this.stringAdd(action));
+    } else if (actionType === actions.stringRemove) {
+      aops.push(this.stringRemove(action));
+    } else {
+      throw new Error("Unknown Canop action");
+    }
+    return aops;
+  },
+  // action: [actions.stringAdd, path, …params]
+  // Return an AtomicOperation.
+  stringAdd: function(action) {
+    return this.local.add(action[1], action[2], action[3],
+      this.base, this.localId);
+  },
+  // action: [actions.stringAdd, path, …params]
+  // Return an AtomicOperation.
+  stringRemove: function(action) {
+    return this.local.remove(action[1], action[2], action[3],
+      this.base, this.localId);
   },
 
   // Send a signal to all other nodes of the network.

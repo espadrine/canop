@@ -1,3 +1,5 @@
+`canop`
+
 *Transport-agnostic operation-rich intention-preserving client-server
 JSON synchronization protocol.*
 
@@ -8,7 +10,7 @@ Currently only supports string values.
 var canop = require('canop');
 var server = new canop.Server({ data: {some: 'data'} });
 // send must throw if it cannot send the message.
-var client = new canop.Client({ send: function(message) {}, });
+var client = new canop.Client({ send: function(message) {} });
 server.addClient({
   send: function(message) { client.receive(message); },
   onReceive: function(receive) { client.send = receive; },
@@ -61,9 +63,14 @@ var actionType = client.registerAction(
   // Return the reverse operation for a change with this action.
   // It must be so reverse(reverse(change)) == change.
   function reverse(change) {});
-client.act(actionType, path, params);
+client.act([actionType, path, …params]);
 // For instance, this works:
-client.act(client.action.set, ['final'], 'the end.');
+client.act([client.action.set, ['final'], 'the end.']);
+// You can buffer operations locally to make them into an atomic transaction.
+client.actAtomically([
+  [client.action.stringAdd, ['some'], 0, 'modified'],
+  [client.action.objectMove, [], 'some', ['final']],
+]);
 ```
 
 # Pros
@@ -127,8 +134,8 @@ make
 
 # TODO
 
+- Aggregate client operations prior to sending
 - JSON-compatible protocol
 - Array index rebasing
-- Garbage collection of client-side operations
 - Autosave of operations to disk
 - Atomic compound operations
