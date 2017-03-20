@@ -1,0 +1,181 @@
+<!doctype html><meta charset=utf-8>
+<title> Testing Convergent Collaborative Editing </title>
+<link rel=stylesheet href=cm/lib/codemirror.css>
+<body>
+<div id=domed0></div>
+<div id=domed1></div>
+<script src=cm/lib/codemirror.js></script>
+<script src=canop.js>/* Collaborative library */</script>
+<script src=canop-codemirror.js></script>
+<script>
+(function(exports, undefined) {
+  let Server = function() {
+    this.canopServer = new canop.Server({data: ""})
+    this.clients = []
+  }
+  Server.prototype = {
+    addClient(c) {
+      this.canopServer.addClient({
+        send: function(msg) {c.receive(msg)},
+        onReceive: function(receive) {c.addEventListener('outbound', receive)},
+      })
+      this.clients.push(c)
+    },
+    read() {
+      this.clients.forEach(client => client.write())
+    },
+  }
+  exports.Server = Server
+  exports.server = new Server()
+
+  let FakeWebSocket = function() {
+    this.listeners = new Map()
+    this.pipeIn = []
+    this.pipeOut = []
+    server.addClient(this)
+  }
+  FakeWebSocket.prototype = {
+    eventExists(name) {
+      if (!this.listeners.has(name)) {
+        this.listeners.set(name, []);
+      }
+    },
+    emit(name, ...args) {
+      this.eventExists(name)
+      this.listeners.get(name).forEach(listn => listn(...args))
+    },
+    addEventListener(name, fn) {
+      this.eventExists(name)
+      this.listeners.get(name).push(fn);
+    },
+    send(msg) { this.pipeOut.push(msg) },
+    write() {
+      this.pipeOut.forEach(msg => this.emit('outbound', msg))
+      this.pipeOut = []
+    },
+    receive(msg) { this.pipeIn.push(msg) },
+    read() {
+      this.pipeIn.forEach(msg => this.process(msg))
+      this.pipeIn = []
+    },
+    process(msg) { this.emit('message', {data: msg}) },
+  }
+  exports.FakeWebSocket = FakeWebSocket
+}(this))
+window.OldWebSocket = window.WebSocket
+window.WebSocket = FakeWebSocket
+
+let editor0 = CodeMirror(domed0)
+let editor1 = CodeMirror(domed1)
+let shared0 = new CanopCodemirrorHook(editor0)
+let shared1 = new CanopCodemirrorHook(editor1)
+let init = function(value) {
+  window.server = new Server()
+  domed0.innerHTML = ''
+  domed1.innerHTML = ''
+  editor0 = CodeMirror(domed0)
+  editor1 = CodeMirror(domed1)
+  shared0 = new CanopCodemirrorHook(editor0)
+  shared1 = new CanopCodemirrorHook(editor1)
+  shared0.socket.emit('open')
+  shared1.socket.emit('open')
+  server.read()
+  shared0.socket.read();
+  shared1.socket.read();
+  editor0.setValue(value)
+  server.read()
+  shared0.socket.read();
+  shared1.socket.read();
+}
+
+let errors = []
+let logError = function(msg) {
+  console.error(msg)
+  errors.push(msg)
+}
+let escapeXml = function(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+}
+let showErrors = function() {
+  if (errors.length === 0) {
+    document.body.innerHTML = '<span style="color:green">✓</span>'
+  } else {
+    document.body.innerHTML = ''
+    document.body.style.color = 'red'
+    document.body.innerHTML =
+      '<pre>' + errors.map(escapeXml).join('\n') + '</pre>'
+  }
+}
+
+let test = function(name, value, end, change) {
+  init(value)
+  change()
+  server.read()
+  shared0.socket.read();
+  shared1.socket.read();
+  let ed0 = editor0.getValue()
+  let ed1 = editor1.getValue()
+  let serv = server.canopServer.toString()
+  if (ed0 !== ed1) {
+    logError(`${name}: client divergence ${JSON.stringify(ed0)} ≠ ${JSON.stringify(ed1)}`)
+  } else if (ed0 !== serv) {
+    logError(`${name}: server divergence ${JSON.stringify(serv)} ≠ ${JSON.stringify(ed1)}`)
+  } else if (ed0 !== end) {
+    logError(`${name}: intention divergence ${JSON.stringify(ed0)} ≠ ${JSON.stringify(end)}`)
+  }
+}
+
+test('simultaneous substitution', 'abc', 'AbC', function() {
+  editor0.replaceRange('A', {line:0, ch:0}, {line:0, ch:1})
+  editor1.replaceRange('C', {line:0, ch:2}, {line:0, ch:3})
+})
+test('insertion / insertion', 'c', 'abcde', function() {
+  editor0.replaceRange('a', {line:0, ch:0})
+  server.read()
+  editor0.replaceRange('b', {line:0, ch:1})
+  server.read()
+  editor1.replaceRange('d', {line:0, ch:1})
+  server.read()
+  editor1.replaceRange('e', {line:0, ch:2})
+  server.read()
+  shared0.socket.read();
+  shared1.socket.read();
+})
+test('insertion / deletion', 'abef', 'af', function() {
+  editor0.replaceRange('', {line:0, ch:1}, {line:0, ch:3})
+  server.read()
+  editor1.replaceRange('c', {line:0, ch:2})
+  editor1.replaceRange('d', {line:0, ch:3})
+})
+test('deletion / insertion', 'ab', 'bc', function() {
+  editor0.replaceRange('', {line:0, ch:0}, {line:0, ch:1})
+  editor1.replaceRange('c', {line:0, ch:2})
+})
+test('deletion / deletion', 'abc', 'b', function() {
+  editor0.replaceRange('', {line:0, ch:0}, {line:0, ch:1})
+  editor1.replaceRange('', {line:0, ch:2}, {line:0, ch:3})
+})
+test('one-sided insertion vs substitution', 'hello', 'Hello', function() {
+  editor0.replaceRange('hi ', {line:0, ch:0})
+  server.read()
+  shared0.socket.read();
+  editor1.replaceRange('H', {line:0, ch:0}, {line:0, ch:1})
+})
+test('hi → hello', 'hi', 'hello', function() {
+  editor0.replaceRange('', {line:0, ch:1}, {line:0, ch:2})
+  server.read()
+  editor1.replaceRange('e', {line:0, ch:1})
+  server.read()
+  editor1.replaceRange('l', {line:0, ch:2})
+  server.read()
+  editor1.replaceRange('l', {line:0, ch:3})
+  server.read()
+  editor1.replaceRange('o', {line:0, ch:4})
+  server.read()
+  shared0.socket.read();
+  shared1.socket.read();
+})
+
+showErrors()
+</script>
+</body>
