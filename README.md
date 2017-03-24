@@ -134,8 +134,6 @@ make
 
 # TODO
 
-- Aggregate client operations prior to sending
 - JSON-compatible protocol
 - Array index rebasing
 - Autosave of operations to disk
-- Atomic compound operations
