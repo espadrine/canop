@@ -48,7 +48,6 @@ function CanopCodemirrorHook(editor, options) {
 
 CanopCodemirrorHook.prototype = {
   connect: function CCHconnect(options) {
-    console.log('Connecting…');
     var self = this;
     this.socket = new WebSocket(this.url);
     this.socket.addEventListener('message', this.socketReceive);
@@ -72,7 +71,6 @@ CanopCodemirrorHook.prototype = {
   },
 
   socketReceive: function CCHsocketReceive(event) {
-    console.log('< ' + event.data);
     this.canopClient.receive('' + event.data);
   },
 
