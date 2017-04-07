@@ -966,6 +966,7 @@ Client.prototype = {
 
   // Return a list of atomic operations, or undefined.
   operationsSinceBase: function(base) {
+    if (base === this.base) { return []; }
     for (var i = this.canon.list.length - 1; i >= 0; i--) {
       if (this.canon.list[i].mark[0] <= base) {
         return this.canon.list.slice(i + 1);
