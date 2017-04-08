@@ -34,6 +34,7 @@ client.signal({ name: 'Grace', focus: ['some'], sel: [[9,9]] });
 var changeListener = function(event) {};
 // Changes from other computers.
 client.on('change', changeListener);
+server.on('change', changeListener);
 // Changes from this computer.
 client.on('localChange', changeListener);
 // An immutable copy of the data at a path. TODO
@@ -106,7 +107,7 @@ the expense of intention preservation). A description of that algorithm will be
 available in the paper. You may contribute a patch that implements this
 algorithm.
 
-*Compound operations* meant to be atomic will usually keep their meaning thanks
+*Atomic transactions* will usually keep their meaning thanks
 to Canop's intention preservation system. However, it is not guaranteed. For
 instance, assuming we store the money of two bank accounts in a list. We encode
 a transaction between them with two operations, add and remove: `[20, 50]` ① →
@@ -118,11 +119,11 @@ sequence: `[20, 50]` ① → `[15, 50]` ③ → `[15, 20]` ② → `[15, 25]` �
 case; one account did not receive its money, and the other received money that
 was not even in the system.
 
-Canop can, in theory, be instructed to send operations that are part of an
-atomic compound in bulk, ensuring that no operation will be executed in the
-middle. We hope to implement that. Assuming the swap was performed as a move,
-that would have been enough for this example. Alternatively, you may add a
-custom atomic operation.
+Use `client.actAtomically()` to send operations that are part of an atomic
+transaction in bulk, ensuring that no operation will be executed in the middle, and
+that the data will never be read within operations.
+Alternatively, you may add a custom atomic operation (once the primitives for
+that are implemented).
 
 # Contributing
 
@@ -134,6 +135,9 @@ make
 
 # TODO
 
+- Signal a list of all currently connected clients and of disconnections
 - JSON-compatible protocol
 - Array index rebasing
 - Autosave of operations to disk
+- Separate display hooks from transport hooks
+- Allow creating user-defined operations
