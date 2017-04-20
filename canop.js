@@ -25,6 +25,9 @@ var PROTOCOL_ERROR = 5;
 var PROTOCOL_SINCE = 6;
 var PROTOCOL_DELTA_SINCE = 7;
 var PROTOCOL_WARN_UNKNOWN_BASE = 0;
+var warnNamesFromCode = [
+  "UnknownBaseError",
+];
 
 // The last incrementable integer in IEEE754.
 var MAX_INT = 0x1fffffffffffff;
@@ -624,7 +627,9 @@ Client.prototype = {
         if (error[0] === PROTOCOL_WARN_UNKNOWN_BASE) {
           // FIXME: fetch a fully copy, show the user what will happen if their
           // local changes are applied on top of if.
-          self.emit('unsyncable');
+          var error = new Error(error[1]);
+          error.name = warnNamesFromCode[error[0]];
+          self.emit('unsyncable', error);
         }
       });
     } else if (messageType === PROTOCOL_ERROR) {
