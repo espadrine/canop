@@ -412,6 +412,7 @@ function Client(params) {
   };
   this.clients = {}; // Map from client ids to {send, onReceive}.
   this.nextClientId = 1;
+  this.clientCount = 0;  // Number of clients connected.
   this.signalFromClient = Object.create(null);
 
   this.clientState = STATE_UNSYNCABLE;
@@ -424,6 +425,7 @@ function Client(params) {
           self.send(JSON.stringify([PROTOCOL_SINCE, self.localId, self.base]));
         }
         self.clientState = STATE_LOADING;
+        self.clientCount++;
       } catch(e) {
         self.emit('unsyncable', e);
       }
@@ -433,7 +435,14 @@ function Client(params) {
       self.clientState = STATE_UNSYNCABLE;
       self.once('syncing', initiateLoading);
     });
-    self.once('syncing', initiateLoading);
+    this.once('syncing', initiateLoading);
+    this.on('signal', function(event) {
+      if (event.data.connected !== undefined) {
+        if (event.data.connected) {
+          self.clientCount++;
+        } else { self.clientCount--; }
+      }
+    });
   }
 }
 exports.Client = Client;
@@ -881,6 +890,7 @@ Client.prototype = {
     newClient.base = 0;
     self.nextClientId++;
     self.clients[newClient.id] = newClient;
+    self.clientCount++;
 
     newClient.onReceive(function receiveFromClient(message) {
       try {
@@ -930,7 +940,6 @@ Client.prototype = {
       } else if (messageType === PROTOCOL_SIGNAL) {
         var clientId = protocol[1];
         var data = protocol[2];
-        self.signalFromClient[clientId] = self.signalFromClient[clientId] || {};
         if (data !== undefined) {
           for (var key in data) {
             self.signalFromClient[clientId][key] = data[key];
@@ -946,14 +955,21 @@ Client.prototype = {
         console.error("Unknown protocol message " + message);
       }
     });
+    // Send the connection signal.
+    this.signalFromClient[newClient.id] = this.signalFromClient[newClient.id] ||
+      Object.create(null);
+    this.signalFromClient[newClient.id].connected = true;
   },
 
   // Send aggregated signals from other clients to this client.
   sendSignalsToClient: function(client) {
     for (var clientId in this.clients) {
-      if (this.signalFromClient[clientId] !== undefined) {
+      if (client.id !== +clientId) {
         client.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId,
           this.signalFromClient[clientId]]));
+        var otherClient = this.clients[clientId];
+        otherClient.send(JSON.stringify([PROTOCOL_SIGNAL, client.id,
+          this.signalFromClient[client.id]]));
       }
     }
   },
@@ -964,9 +980,11 @@ Client.prototype = {
     // Send a reset signal to all clients.
     for (var aClientId in this.clients) {
       var aClient = this.clients[aClientId];
-      aClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId]));
+      aClient.send(JSON.stringify([PROTOCOL_SIGNAL, +clientId,
+        {connected: false}]));
     }
     delete this.signalFromClient[clientId];
+    self.clientCount--;
   },
 
   // Return a list of atomic operations, or undefined.

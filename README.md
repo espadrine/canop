@@ -26,7 +26,9 @@ client.move([], 'some', ['final']);  // {final: 'modified data'}
 client.on('signal', function(event) { event.clientId, event.data });
 // Typically, sel is a list of selection ranges, where the first offset is the
 // cursor (which moves the selection with shift+arrow).
+// Also, connected is signaled when a node joins or leaves.
 client.signal({ name: 'Grace', focus: ['some'], sel: [[9,9]] });
+client.clientCount  // Number of clients currently connected.
 
 // This event has the following keys:
 // - changes: Array of [path, action type, parameters…]
