@@ -125,10 +125,10 @@ sendChange(star, 0);
 var result = '' + star.server;
 assert.equal(result, 'a', 'Inserting a character immediately removed');
 
-// localId
+// id
 var star = new Star('');
-assert.equal(star.clients[0].localId, 1, 'Client 0 localId');
-assert.equal(star.clients[1].localId, 2, 'Client 1 localId');
+assert.equal(star.clients[0].id, 1, 'Client 0 id');
+assert.equal(star.clients[1].id, 2, 'Client 1 id');
 
 // clientCount
 var star = new Star('');
@@ -136,3 +136,7 @@ sendChange(star, 0);
 assert.equal(star.server.clientCount, 2, 'Server clientCount');
 assert.equal(star.clients[0].clientCount, 2, 'Client 0 clientCount');
 assert.equal(star.clients[1].clientCount, 2, 'Client 1 clientCount');
+star.server.removeClient(star.clients[0]);
+sendChange(star, 1);
+assert.equal(star.server.clientCount, 1, 'Server clientCount after disconnection');
+assert.equal(star.clients[1].clientCount, 1, 'Client 1 clientCount after disconnection');

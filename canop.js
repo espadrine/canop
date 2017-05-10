@@ -400,7 +400,7 @@ function Client(params) {
   var self = this;
   params = params || {};
   this.base = params.base || 0;  // Most recent known canon operation index.
-  this.localId = 0;              // Identifier of the current machine.
+  this.id = 0;                   // Identifier of the current machine.
   this.local = new Operation();  // Operation for local changes.
   this.sent = new Operation();   // Operation for changes sent but not acknowledged.
   this.canon = new Operation();  // Operation for changes acknowledged by the server.
@@ -435,10 +435,10 @@ function Client(params) {
   if (!this.isServer) {
     var initiateLoading = function() {
       try {
-        if (self.localId === 0) {
+        if (self.id === 0) {
           self.send(JSON.stringify([PROTOCOL_PLEASE, PROTOCOL_VERSION]));
         } else {
-          self.send(JSON.stringify([PROTOCOL_SINCE, self.localId, self.base]));
+          self.send(JSON.stringify([PROTOCOL_SINCE, self.id, self.base]));
         }
         self.clientState = STATE_LOADING;
         self.clientCount++;
@@ -709,13 +709,13 @@ Client.prototype = {
     // TODO: emit the update event.
   },
 
-  reset: function(data, base, localId) {
+  reset: function(data, base, id) {
     this.local = new Operation();
     this.sent = new Operation();
     this.canon = new Operation();
-    this.localId = localId;
+    this.id = id;
     if (!this.disableData) { this.data = data; }
-    this.receiveChange([PROTOCOL_DELTA, [], [[[base, localId, 0], [actions.set, data]]]]);
+    this.receiveChange([PROTOCOL_DELTA, [], [[[base, id, 0], [actions.set, data]]]]);
   },
   localToSent: function() {
     // Switch all local operations to sent.
@@ -879,13 +879,13 @@ Client.prototype = {
   // Return an AtomicOperation.
   stringAdd: function(action) {
     return this.local.add(action[1], action[2], action[3],
-      this.base, this.localId);
+      this.base, this.id);
   },
   // action: [actions.stringAdd, path, …params]
   // Return an AtomicOperation.
   stringRemove: function(action) {
     return this.local.remove(action[1], action[2], action[3],
-      this.base, this.localId);
+      this.base, this.id);
   },
   // action: [actions.set, path, new value, old value]
   // Return an AtomicOperation.
@@ -900,7 +900,7 @@ Client.prototype = {
     if (this.clientState !== STATE_READY) { return; }
     var json = JSON.stringify(content);
     try {
-      this.send(JSON.stringify([PROTOCOL_SIGNAL, this.localId, content]));
+      this.send(JSON.stringify([PROTOCOL_SIGNAL, this.id, content]));
     } catch(e) {
       this.emit('unsyncable', e);
     }

@@ -143,7 +143,6 @@ make
 
 # TODO
 
-- Signal a list of all currently connected clients and of disconnections
 - Textarea adapter
 - Customizable UI sync debouncing
 - JSON-compatible protocol
