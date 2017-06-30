@@ -6,6 +6,12 @@ JSON synchronization protocol.*
 **Work in progress**. Status: alpha.
 Currently only supports string values.
 
+A simple [client](./web/index.html)-[server](./app.js) example is available,
+using adapters for [WebSocket](./web/canop-websocket.js) and
+[CodeMirror](./web/canop-codemirror.js).
+
+Exploratory API description:
+
 ```js
 var canop = require('canop');
 var server = new canop.Server({ data: {some: 'data'} });
@@ -138,6 +144,7 @@ make
 # TODO
 
 - Signal a list of all currently connected clients and of disconnections
+- Separate wire and widget hooks.
 - JSON-compatible protocol
 - Array index rebasing
 - Autosave of operations to disk

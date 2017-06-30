@@ -1,40 +1,16 @@
 (function(exports, undefined) {
 
 var canop = exports.canop;
-var RECONNECTION_INTERVAL = 256;  // in ms. Increases exponentially to 10min.
 
+// client: a canop.Client instance.
 // editor: a CodeMirror instance.
-// options:
-// - url: location of websocket. Defaults to ws://<dns>/websocket.
-// - error: function triggered when the websocket errors.
-// - open: function triggered when the websocket opens.
-// - close: function triggered when the websocket closes.
-//   (You can also rely on .canopClient.on('unsyncable', …)
-// - reconnect: if true, automatically reconnect when disconnected.
-function CanopCodemirrorHook(editor, options) {
-  options = options || {};
-  options.url = options.url ||
-    // Trick: use the end of either http: or https:.
-    'ws' + window.location.protocol.slice(4) + '//' +
-    window.location.host + '/websocket';
-
+// options: (planned)
+// - path: list determining the location of the corresponding string in the JSON
+//   object.
+function CanopCodemirror(client, editor) {
+  this.canopClient = client;
   this.editor = editor;
-  var self = this;
-  this.canopClient = new canop.Client({
-    send: function(msg) {
-      if (self.socket === undefined ||
-          self.socket.readyState !== WebSocket.OPEN) {
-        throw new Error("WebSocket is not open for business");
-      }
-      self.socket.send(msg);
-    }
-  });
-  this.url = "" + options.url;
-  this.socket = null;
-  this.reconnect = (options.reconnect === undefined)? true: !!options.reconnect;
-  this.reconnectionInterval = RECONNECTION_INTERVAL;
 
-  this.socketReceive = this.socketReceive.bind(this);
   this.editorChange = this.editorChange.bind(this);
   this.remoteChange = this.remoteChange.bind(this);
   this.cursorActivity = this.cursorActivity.bind(this);
@@ -43,42 +19,14 @@ function CanopCodemirrorHook(editor, options) {
   this.canopClient.on('change', this.remoteChange);
   this.canopClient.on('signal', this.signalReceive);
   this.clientSelectionWidgets = Object.create(null);
-  this.connect(options);
 }
 
-CanopCodemirrorHook.prototype = {
-  connect: function CCHconnect(options) {
-    var self = this;
-    this.socket = new WebSocket(this.url);
-    this.socket.addEventListener('message', this.socketReceive);
-    this.socket.addEventListener('close', function(e) {
-      self.canopClient.emit('unsyncable');
-      if (self.reconnect) {
-        setTimeout(function() { self.connect(options); },
-          self.reconnectionInterval);
-        if (self.reconnectionInterval <= 1000 * 60 * 10) {
-          self.reconnectionInterval *= 2;
-        }
-      }
-    });
-    this.socket.addEventListener('open', function() {
-      self.reconnectionInterval = RECONNECTION_INTERVAL;
-      self.canopClient.emit('syncing');
-    });
-    if (options.error) { this.socket.addEventListener('error', options.error); }
-    if (options.open) { this.socket.addEventListener('open', options.open); }
-    if (options.close) { this.socket.addEventListener('close', options.close); }
-  },
-
-  socketReceive: function CCHsocketReceive(event) {
-    this.canopClient.receive('' + event.data);
-  },
-
-  remoteChange: function CCHremoteUpdate(event) {
+CanopCodemirror.prototype = {
+  remoteChange: function canopCodemirrorRemoteUpdate(event) {
     this.updateEditor(event.changes, event.posChanges);
   },
 
-  editorChange: function CCHeditorChange(editor, change, actions) {
+  editorChange: function canopCodemirrorEditorChange(editor, change, actions) {
     var actions = actions || [];
     var from = change.from;
     var to = change.to;
@@ -98,7 +46,7 @@ CanopCodemirrorHook.prototype = {
     }
   },
 
-  cursorActivity: function CCHcursorActivity(editor) {
+  cursorActivity: function canopCodemirrorCursorActivity(editor) {
     var self = this;
     var selections = self.editor.listSelections().map(function(selection) {
       return [
@@ -109,7 +57,7 @@ CanopCodemirrorHook.prototype = {
     self.canopClient.signal({sel: selections});
   },
 
-  resetEditor: function CCHresetEditor() {
+  resetEditor: function canopCodemirrorResetEditor() {
     this.editor.off('change', this.editorChange);
     this.editor.off('cursorActivity', this.cursorActivity);
     var cursor = this.editor.getCursor();
@@ -120,7 +68,7 @@ CanopCodemirrorHook.prototype = {
   },
 
   // Takes a list of AtomicOperations and a list of PosChanges.
-  updateEditor: function CCHupdateEditor(delta, posChanges) {
+  updateEditor: function canopCodemirrorUpdateEditor(delta, posChanges) {
     this.editor.off('change', this.editorChange);
     this.editor.off('cursorActivity', this.cursorActivity);
     var cursor = this.editor.indexFromPos(this.editor.getCursor());
@@ -130,7 +78,7 @@ CanopCodemirrorHook.prototype = {
     this.editor.on('change', this.editorChange);
   },
 
-  applyDelta: function CCHapplyDelta(delta) {
+  applyDelta: function canopCodemirrorApplyDelta(delta) {
     for (var i = 0; i < delta.length; i++) {
       var change = delta[i];
       if (change[1] === canop.action.set) {
@@ -145,14 +93,14 @@ CanopCodemirrorHook.prototype = {
     }
   },
 
-  updateCursor: function CCHupdateCursor(posChanges, oldCursor) {
+  updateCursor: function canopCodemirrorUpdateCursor(posChanges, oldCursor) {
     cursor = canop.changePosition(oldCursor, posChanges, true);
     this.editor.setCursor(this.editor.posFromIndex(cursor));
   },
 
   // UI management to show selection from other participants.
 
-  signalReceive: function CCHsignalReceive(event) {
+  signalReceive: function canopCodemirrorSignalReceive(event) {
     var clientId = event.clientId;
     var data = event.data;
     this.clientSelectionWidgets[clientId] =
@@ -179,7 +127,7 @@ CanopCodemirrorHook.prototype = {
   },
 
   // Return a list of widgets that got added.
-  addSelection: function CCHaddSelection(selection, name) {
+  addSelection: function canopCodemirrorAddSelection(selection, name) {
     var widgets = [this.addUiCursor(selection[0], name)];
     if (selection[0] !== selection[1]) {
       widgets.push(this.addUiSelection(selection, name));
@@ -188,7 +136,7 @@ CanopCodemirrorHook.prototype = {
   },
 
   // Return the CodeMirror bookmark associated with the cursor.
-  addUiCursor: function CCHaddUiCursor(offset, name) {
+  addUiCursor: function canopCodemirrorAddUiCursor(offset, name) {
     var pos = this.editor.posFromIndex(offset);
     var coords = this.editor.cursorCoords(pos);
     var domCursor = document.createElement("span");
@@ -217,7 +165,7 @@ CanopCodemirrorHook.prototype = {
 
   // selection: list of two offsets.
   // Returns a CodeMirror mark.
-  addUiSelection: function CCHaddUiSelection(selection, name) {
+  addUiSelection: function canopCodemirrorAddUiSelection(selection, name) {
     var color = this.colorFromName(name.toString(), 0.9);
     if (selection[0] < selection[1]) {
       var startIdx = selection[0];
@@ -234,7 +182,7 @@ CanopCodemirrorHook.prototype = {
 
   // luma and chroma are between 0 and 1, hue between 0 and 360.
   // Return a CSS rgb(…) string.
-  rgbFromLch: function CCHrgbFromLch(luma, chroma, hue) {
+  rgbFromLch: function canopCodemirrorRgbFromLch(luma, chroma, hue) {
     var hue6 = hue / 60;
     var x = chroma * (1 - Math.abs((hue6 % 2) - 1));
     var r = 0, g = 0, b = 0;
@@ -260,7 +208,7 @@ CanopCodemirrorHook.prototype = {
 
   // name: string. Returns a hue from 0 to 360
   // Small differences in the string yield very different colors.
-  hueFromName: function CCHcolorFromName(name) {
+  hueFromName: function canopCodemirrorColorFromName(name) {
     var hue = 0;
     for (var i = 0; i < name.length; i++) {
       hue = (hue + name.charCodeAt(i)) % 360;
@@ -271,12 +219,16 @@ CanopCodemirrorHook.prototype = {
 
   // Return a CSS rgb(…) string for each string name, with the same luma, and
   // such that small differences in the string yield very different colors.
-  colorFromName: function CCHcolorFromName(name, luma) {
+  colorFromName: function canopCodemirrorColorFromName(name, luma) {
     if (luma === undefined) { luma = 0.7; }
     return this.rgbFromLch(luma, 0.6, this.hueFromName(name));
   }
 };
 
 
-exports.CanopCodemirrorHook = CanopCodemirrorHook;
+canop.ui = canop.ui || {};
+canop.ui.codemirror = function(client, options) {
+  return new CanopCodemirror(client, options);
+};
+
 }(this));

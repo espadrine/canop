@@ -4,17 +4,19 @@
 <body>
 <script src=cm/lib/codemirror.js></script>
 <script src=canop.js>/* Collaborative library */</script>
-<script src=canop-codemirror.js></script>
+<script src=canop-websocket.js>/* WebSocket protocol adapter */</script>
+<script src=canop-codemirror.js>/* CodeMirror UI adapter */</script>
 <script>
-var editor = CodeMirror(document.body);
-var shared = new CanopCodemirrorHook(editor, {
+var client = new canop.Client();
+canop.wire.websocket(client, {
   url: "ws://" + window.location.host + "/$websocket:text",
   open: function() { console.log('websocket open'); },
   close: function() { console.log('websocket close'); },
   error: function() { console.log('websocket error'); },
 });
-shared.canopClient.on('synced', function() { console.log('synced'); });
-shared.canopClient.on('syncing', function() { console.log('syncing'); });
-shared.canopClient.on('unsyncable', function() { console.log('unsyncable'); });
+canop.ui.codemirror(client, CodeMirror(document.body));
+client.on('synced', function() { console.log('synced'); });
+client.on('syncing', function() { console.log('syncing'); });
+client.on('unsyncable', function() { console.log('unsyncable'); });
 </script>
 </body>
