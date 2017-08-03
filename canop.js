@@ -381,6 +381,7 @@ var STATE_READY = 2;      // Ready to exchange diffs.
 //   which data is exchanged.
 function Client(params) {
   var self = this;
+  params = params || {};
   this.base = params.base || 0;  // Most recent known canon operation index.
   this.localId = 0;              // Identifier of the current machine.
   this.local = new Operation();  // Operation for local changes.
@@ -984,7 +985,7 @@ Client.prototype = {
         {connected: false}]));
     }
     delete this.signalFromClient[clientId];
-    self.clientCount--;
+    this.clientCount--;
   },
 
   // Return a list of atomic operations, or undefined.
