@@ -11,9 +11,10 @@ var exports = {};
 
 // Tags indicate the nature of an atomic operation.
 var actions = {
-  set: 0,
-  stringAdd: 7,
-  stringRemove: 8
+  pass: 0,
+  set: 1,
+  stringAdd: 8,
+  stringRemove: 9
 };
 var PROTOCOL_VERSION = 0;
 var PROTOCOL_PLEASE = 0;
@@ -55,8 +56,16 @@ AtomicOperation.prototype = {
           -this.value.length, this.original? this.original.key: null);
     }
   },
+  // Is this operation's type rebaseable (ie, its indices get reshifted)?
+  // If it is, then key = index in a list.
+  rebaseable: function rebaseable() {
+    return this.action === actions.stringAdd ||
+      this.action === actions.stringRemove;
+  },
   // Get this operation modified by a list of PosChanges.
   getModifiedBy: function getModifiedBy(changes) {
+    if (!this.rebaseable()) { return; }
+
     var oldEnd = this.key + this.value.length;
     this.original = {
       mark: this.mark.slice(),
@@ -74,8 +83,7 @@ AtomicOperation.prototype = {
       var end = changePosition(oldEnd, changes);
     }
     if (key === undefined || end === undefined) {
-      this.key = 0;  // Nulled to avoid adding spaces at the end in toString().
-      this.value = "";  // Null operation.
+      this.action = actions.pass;  // Nulled to avoid adding spaces at the end in toString().
     } else {
       this.key = key;
       var mappedOldEnd = this.key + this.value.length;
@@ -91,12 +99,15 @@ AtomicOperation.prototype = {
   },
   // Return an inverse of this operation, or undefined if it cannot be inversed.
   inverse: function inverse() {
+    var op = this.dup();
     if (this.action === actions.stringAdd) {
-      var op = this.dup();
       op.action = actions.stringRemove;
     } else if (this.action === actions.stringRemove) {
-      var op = this.dup();
       op.action = actions.stringAdd;
+    } else if (this.action === actions.set) {
+      var newValue = op.key;
+      op.key = op.value;  // Old value
+      op.value = newValue;// New value
     }
     return op;
   },
@@ -163,6 +174,10 @@ var changePosition = function changePosition(key, changes, bestGuess) {
   var originalKey = key;
   for (var i = 0; i < changes.length; i++) {
     var change = changes[i];
+    if (change === undefined) {
+      if (bestGuess) { return key; }
+      else { return; }
+    }
     var newKey = change.update(key, originalKey);
     var contextFound = false;
     if (newKey === undefined) {
@@ -263,11 +278,8 @@ Operation.prototype = {
     var posChanges = [];
     for (var i = 0; i < this.list.length; i++) {
       var change = this.list[i].change();
-      if (change !== undefined) {
-        posChanges.push(change);
-      } else {
-        posChanges = [];
-      }
+      if (change === undefined) { return posChanges; }
+      posChanges.push(change);
     }
     return posChanges;
   },
@@ -275,12 +287,11 @@ Operation.prototype = {
   inverseChange: function inverseChange() {
     var posChanges = [];
     for (var i = this.list.length - 1; i >= 0; i--) {
-      var change = this.list[i].change().inverse();
-      if (change !== undefined) {
-        posChanges.push(change);
-      } else {
-        return posChanges;
-      }
+      var change = this.list[i].change();
+      if (change === undefined) { return posChanges; }
+      change = change.inverse();
+      if (change === undefined) { return posChanges; }
+      posChanges.push(change);
     }
     return posChanges;
   },
@@ -293,6 +304,12 @@ Operation.prototype = {
   // Delete a value to the operation. Mutates this.
   remove: function removeOp(path, offset, value, base, local) {
     var aop = new AtomicOperation(actions.stringRemove, offset, value, base, local);
+    this.list.push(aop);
+    return aop;
+  },
+  // Change the whole value. Mutates this.
+  set: function setOp(path, newVal, oldVal, base, local) {
+    var aop = new AtomicOperation(actions.set, newVal, oldVal, base, local);
     this.list.push(aop);
     return aop;
   },
@@ -393,9 +410,7 @@ function Client(params) {
   this.on('change', function(event) { self.updateData(event); });
   this.on('localChange', function(event) { self.updateData(event); });
   // Note: servers should never disable data.
-  if (params.disableData !== undefined) {
-    this.disableData = params.disableData;
-  }
+  this.disableData = !!params.disableData;
   this.data = undefined;  // Holds the current data including local operations.
   // Also, clients should never have params.data.
   // FIXME: maybe separate Server and Client into two classes.
@@ -544,8 +559,10 @@ Client.prototype = {
           throw new Error("Invalid Canop message: delta " + i +
             " has non-Array operation.\nMessage: " + protocolData);
         }
-        if (delta[1][0] === 0) {  // set
-        } else if ((delta[1][0] === 7) || (delta[1][0] === 8)) {
+        if (delta[1][0] === actions.pass) {  // pass
+        } else if (delta[1][0] === actions.set) {  // set
+        } else if ((delta[1][0] === actions.stringAdd) ||
+                   (delta[1][0] === actions.stringRemove)) {
           // string add / remove
           if (typeof delta[1][1] !== "number") {  // offset
             throw new Error("Invalid Canop message: delta " + i +
@@ -846,7 +863,10 @@ Client.prototype = {
   commitAction: function(action) {
     var actionType = action[0];
     var aops = [];  // AtomicOperations
-    if (actionType === actions.stringAdd) {
+    if (actionType === actions.pass) {
+    } else if (actionType === actions.set) {
+      aops.push(this.set(action));
+    } else if (actionType === actions.stringAdd) {
       aops.push(this.stringAdd(action));
     } else if (actionType === actions.stringRemove) {
       aops.push(this.stringRemove(action));
@@ -866,6 +886,12 @@ Client.prototype = {
   stringRemove: function(action) {
     return this.local.remove(action[1], action[2], action[3],
       this.base, this.localId);
+  },
+  // action: [actions.set, path, new value, old value]
+  // Return an AtomicOperation.
+  set: function(action) {
+    return this.local.set(action[1], action[2], action[3],
+        this.base, this.localId);
   },
 
   // Send a signal to all other nodes of the network.
@@ -915,6 +941,7 @@ Client.prototype = {
       } else if (messageType === PROTOCOL_SINCE) {
         var base = protocol[2];
         self.removeClient(newClient);
+        var oldClientId = newClient.id;
         newClient.id = protocol[1];
         newClient.base = base;
         self.clients[newClient.id] = newClient;
@@ -929,6 +956,10 @@ Client.prototype = {
           newClient.send(JSON.stringify([PROTOCOL_WARNING,
             [[PROTOCOL_WARN_UNKNOWN_BASE, "Unknown base"]]]));
         }
+        // The client may have had its id changed.
+        delete self.signalFromClient[oldClientId];
+        self.signalFromClient[newClient.id] = self.signalFromClient[newClient.id] ||
+          Object.create(null);
         self.sendSignalsToClient(newClient);
       } else if (messageType === PROTOCOL_DELTA) {
         var change = Operation.fromProtocol(protocol);

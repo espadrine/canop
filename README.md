@@ -144,9 +144,9 @@ make
 # TODO
 
 - Signal a list of all currently connected clients and of disconnections
-- Separate wire and widget hooks.
+- Textarea adapter
+- Customizable UI sync debouncing
 - JSON-compatible protocol
 - Array index rebasing
 - Autosave of operations to disk
-- Separate display hooks from transport hooks
 - Allow creating user-defined operations

@@ -30,27 +30,25 @@ Server: `[1, json, base, machine]`.
 
 Delta for any value:
 
-- `action`: set = 0
+- `action`: pass = 0, set = 1
 - `key`: any JSON value, possibly of a different type.
 - `value`: old value, if any.
 
-(Note: `[0]` "set nothing to nothing" is the empty operation.)
-
 Delta for objects:
 
-- `action`: add = 1, remove = 2, move = 3.
+- `action`: add = 2, remove = 3, move = 4.
 - `key`: key (in the object) as a string.
 - `value`: value (for move, path of the new location).
 
 Delta for lists:
 
-- `action`: add = 4, remove = 5, move = 6.
+- `action`: add = 5, remove = 6, move = 7.
 - `key`: index (in the list).
 - `value`: value (for move, path of the new location).
 
 Delta for strings:
 
-- `action`: add = 7, remove = 8.
+- `action`: add = 8, remove = 9.
 - `key`: offset (in the string).
 - `value`: string.
 
