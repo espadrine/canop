@@ -94,7 +94,7 @@ CanopCodemirror.prototype = {
   },
 
   updateCursor: function canopCodemirrorUpdateCursor(posChanges, oldCursor) {
-    cursor = canop.changePosition(oldCursor, posChanges, true);
+    var cursor = canop.changePosition(oldCursor, posChanges, true);
     this.editor.setCursor(this.editor.posFromIndex(cursor));
   },
 
@@ -227,8 +227,8 @@ CanopCodemirror.prototype = {
 
 
 canop.ui = canop.ui || {};
-canop.ui.codemirror = function(client, options) {
-  return new CanopCodemirror(client, options);
+canop.ui.codemirror = function(client, editor) {
+  return new CanopCodemirror(client, editor);
 };
 
 }(this));
