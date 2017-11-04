@@ -26,24 +26,73 @@ CanopCodemirror.prototype = {
     this.updateEditor(event.changes, event.posChanges);
   },
 
-  editorChange: function canopCodemirrorEditorChange(editor, change, actions) {
-    var actions = actions || [];
-    var from = change.from;
-    var to = change.to;
-    var added = change.text.join('\n');
-    var removed = change.removed.join('\n');
-    var fromIdx = editor.indexFromPos(from);
-    if (removed.length > 0) {
-      actions.push([canop.action.stringRemove, [], fromIdx, removed]);
+  editorChange: function canopCodemirrorEditorChange(editor, changes) {
+    // The codemirror positions in `changes` correspond to before the change's
+    // execution. However, the `editor` has the changes applied, so that
+    // `indexFromPos` only returns the right answer for positions after the
+    // changes are applied.
+    var actions =  [];
+    var indexFromPos = function(pos) { return editor.indexFromPos(pos); };
+    for (var i = changes.length - 1; i >= 0; i--) {
+      var change = changes[i];
+      var from = change.from;
+      var to = change.to;
+      var added = change.text.join('\n');
+      var removed = change.removed.join('\n');
+      indexFromPos = this.updateIdxFromCmPos(indexFromPos, change, added, removed);
+      var fromIdx = indexFromPos(from);
+      if (removed.length > 0) {
+        actions.push([canop.action.stringRemove, [], fromIdx, removed]);
+      }
+      if (added.length > 0) {
+        actions.push([canop.action.stringAdd, [], fromIdx, added]);
+      }
     }
-    if (added.length > 0) {
-      actions.push([canop.action.stringAdd, [], fromIdx, added]);
-    }
-    if (change.next) {
-      this.editorChange(editor, change.next, actions);
-    } else {
-      this.canopClient.actAtomically(actions);
-    }
+    this.canopClient.actAtomically(actions.reverse());
+  },
+
+  // Compare codemirror positions a and b.
+  cmpCmPos: function canopCompareCodemirrorPosition(a, b) {
+    if (a.line < b.line) { return -1; }
+    if (a.line > b.line) { return  1; }
+    if (a.ch < b.ch)     { return -1; }
+    if (a.ch > b.ch)     { return  1; }
+    return 0;
+  },
+
+  // Is the codemirror position a before b?
+  cmPosLe: function canopCodemirrorPositionLessOrEqual(a, b) {
+    return this.cmpCmPos(a, b) <= 0;
+  },
+
+  updateIdxFromCmPos: function canopUpdateIndexFromCodemirrorPosition(
+  indexFromPos, change, added, removed) {
+    var self = this;
+    return function(pos) {
+      if (self.cmPosLe(pos, change.from)) { return indexFromPos(pos); }
+      else if (self.cmPosLe(change.to, pos)) {
+        var ch = 0;
+        if (change.to.line < pos.line) {
+          ch = pos.ch;
+        } else if (change.text.length <= 1) {
+          ch = pos.ch - (change.to.ch - change.from.ch) + added.length;
+        } else {
+          var lastLineAdded = change.text[change.text.length - 1];
+          ch = pos.ch - change.to.ch + lastLineAdded.length;
+        }
+        return indexFromPos({
+          line: pos.line + change.text.length - 1
+            - (change.to.line - change.from.line),
+          ch: ch,
+        }) + removed.length - added.length;
+      } else if (change.from.line === pos.line) {
+        return indexFromPos(change.from) - change.from.ch + pos.ch;
+      } else {
+        return indexFromPos(change.from)
+          + change.removed.slice(0, pos.line - change.from.line).join('\n').length
+          + pos.ch + 1;
+      }
+    };
   },
 
   cursorActivity: function canopCodemirrorCursorActivity(editor) {
@@ -58,24 +107,24 @@ CanopCodemirror.prototype = {
   },
 
   resetEditor: function canopCodemirrorResetEditor() {
-    this.editor.off('change', this.editorChange);
+    this.editor.off('changes', this.editorChange);
     this.editor.off('cursorActivity', this.cursorActivity);
     var cursor = this.editor.getCursor();
     this.editor.setValue('' + this.canopClient);
     this.editor.setCursor(cursor);
     this.editor.on('cursorActivity', this.cursorActivity);
-    this.editor.on('change', this.editorChange);
+    this.editor.on('changes', this.editorChange);
   },
 
   // Takes a list of AtomicOperations and a list of PosChanges.
   updateEditor: function canopCodemirrorUpdateEditor(delta, posChanges) {
-    this.editor.off('change', this.editorChange);
+    this.editor.off('changes', this.editorChange);
     this.editor.off('cursorActivity', this.cursorActivity);
     var cursor = this.editor.indexFromPos(this.editor.getCursor());
     this.applyDelta(delta);
     this.updateCursor(posChanges, cursor);
     this.editor.on('cursorActivity', this.cursorActivity);
-    this.editor.on('change', this.editorChange);
+    this.editor.on('changes', this.editorChange);
   },
 
   applyDelta: function canopCodemirrorApplyDelta(delta) {
