@@ -120,9 +120,9 @@ CanopCodemirror.prototype = {
   updateEditor: function canopCodemirrorUpdateEditor(delta, posChanges) {
     this.editor.off('changes', this.editorChange);
     this.editor.off('cursorActivity', this.cursorActivity);
-    var cursor = this.editor.indexFromPos(this.editor.getCursor());
+    var selections = this.getSelections();
     this.applyDelta(delta);
-    this.updateCursor(posChanges, cursor);
+    this.setSelections(posChanges, selections);
     this.editor.on('cursorActivity', this.cursorActivity);
     this.editor.on('changes', this.editorChange);
   },
@@ -142,9 +142,29 @@ CanopCodemirror.prototype = {
     }
   },
 
-  updateCursor: function canopCodemirrorUpdateCursor(posChanges, oldCursor) {
-    var cursor = canop.changePosition(oldCursor, posChanges, true);
-    this.editor.setCursor(this.editor.posFromIndex(cursor));
+  getSelections: function canopCodemirrorGetSelections() {
+    var cmSelections = this.editor.listSelections();
+    var selections = [];
+    for (var i = 0; i < cmSelections.length; i++) {
+      var cmSelection = cmSelections[i];
+      selections.push({
+        anchor: this.editor.indexFromPos(cmSelection.anchor),
+        head:   this.editor.indexFromPos(cmSelection.head),
+      });
+    }
+    return selections;
+  },
+
+  setSelections: function canopCodemirrorSetSelections(posChanges, oldSelections) {
+    var cmSelections = [];
+    for (var i = 0; i < oldSelections.length; i++) {
+      var oldSelection = oldSelections[i];
+      cmSelections.push({
+        anchor: canop.changePosition(this.editor.posFromIndex(oldSelection.anchor), posChanges, true),
+        head:   canop.changePosition(this.editor.posFromIndex(oldSelection.head), posChanges, true),
+      });
+    }
+    this.editor.setSelections(cmSelections);
   },
 
   // UI management to show selection from other participants.
