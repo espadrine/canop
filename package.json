@@ -1,6 +1,6 @@
 {
   "name": "canop",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Convergent algorithm for collaborative text.",
   "main": "canop.js",
   "scripts": {
