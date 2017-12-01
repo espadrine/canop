@@ -128,18 +128,23 @@ CanopCodemirror.prototype = {
   },
 
   applyDelta: function canopCodemirrorApplyDelta(delta) {
-    for (var i = 0; i < delta.length; i++) {
-      var change = delta[i];
-      if (change[1] === canop.action.set) {
-        this.editor.setValue(change[2]);
-      } else if (change[1] === canop.action.stringAdd) {
-        this.editor.replaceRange(change[3], this.editor.posFromIndex(change[2]));
-      } else if (change[1] === canop.action.stringRemove) {
-        var from = this.editor.posFromIndex(change[2]);
-        var to = this.editor.posFromIndex(change[2] + change[3].length);
-        this.editor.replaceRange('', from, to);
+    var self = this;
+    self.editor.changeGeneration(true);
+    self.editor.operation(function() {
+      for (var i = 0; i < delta.length; i++) {
+        var change = delta[i];
+        if (change[1] === canop.action.set) {
+          self.editor.setValue(change[2]);
+        } else if (change[1] === canop.action.stringAdd) {
+          var addPos = self.editor.posFromIndex(change[2]);
+          self.editor.replaceRange(change[3], addPos, addPos, '*');
+        } else if (change[1] === canop.action.stringRemove) {
+          var from = self.editor.posFromIndex(change[2]);
+          var to = self.editor.posFromIndex(change[2] + change[3].length);
+          self.editor.replaceRange('', from, to, '*');
+        }
       }
-    }
+    });
   },
 
   getSelections: function canopCodemirrorGetSelections() {
