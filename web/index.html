@@ -8,13 +8,13 @@
 <script src=canop-codemirror.js>/* CodeMirror UI adapter */</script>
 <script>
 var client = new canop.Client();
-canop.wire.websocket(client, {
+var canopwire = canop.wire.websocket(client, {
   url: "ws://" + window.location.host + "/$websocket:text",
   open: function() { console.log('websocket open'); },
   close: function() { console.log('websocket close'); },
   error: function() { console.log('websocket error'); },
 });
-canop.ui.codemirror(client, CodeMirror(document.body));
+var canopui = canop.ui.codemirror(client, CodeMirror(document.body));
 client.on('synced', function() { console.log('synced'); });
 client.on('syncing', function() { console.log('syncing'); });
 client.on('unsyncable', function() { console.log('unsyncable'); });
