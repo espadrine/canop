@@ -140,3 +140,32 @@ star.server.removeClient(star.clients[0]);
 sendChange(star, 1);
 assert.equal(star.server.clientCount, 1, 'Server clientCount after disconnection');
 assert.equal(star.clients[1].clientCount, 1, 'Client 1 clientCount after disconnection');
+
+// Undo
+var star = new Star('');
+star.clients[0].add([], 0, 'ab');
+sendChange(star, 0);
+star.clients[0].add([], 2, 'cd');
+sendChange(star, 0);
+sendChange(star, 1);
+// Undo wrong client
+star.clients[1].undo();
+sendChange(star, 0);
+sendChange(star, 1);
+assert.equal(String(star.clients[0]), 'abcd', 'Client 0 wrong undo');
+assert.equal(String(star.clients[1]), 'abcd', 'Client 1 wrong undo');
+assert.equal(String(star.server), 'abcd', 'Client 1 wrong undo');
+// Undo right client
+star.clients[0].undo();
+assert.equal(String(star.clients[0]), 'ab', 'Client 0 undo');
+sendChange(star, 0);
+sendChange(star, 1);
+assert.equal(String(star.server), 'ab', 'Server undo');
+assert.equal(String(star.clients[1]), 'ab', 'Client 1 undo');
+// Redo
+star.clients[0].redo();
+assert.equal(String(star.clients[0]), 'abcd', 'Client 0 redo');
+sendChange(star, 0);
+sendChange(star, 1);
+assert.equal(String(star.server), 'abcd', 'Server redo');
+assert.equal(String(star.clients[1]), 'abcd', 'Client 1 redo');

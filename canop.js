@@ -295,6 +295,12 @@ Operation.prototype = {
     }
     return posChanges;
   },
+  // actionType: actions.*
+  applyAtomicOperation: function applyAtomicOperation(actionType, key, value, base, local) {
+    var aop = new AtomicOperation(actionType, key, value, base, local);
+    this.list.push(aop);
+    return aop;
+  },
   // Insert a value to the operation. Mutates this.
   add: function addOp(path, offset, value, base, local) {
     var aop = new AtomicOperation(actions.stringAdd, offset, value, base, local);
@@ -406,6 +412,8 @@ function Client(params) {
   this.canon = new Operation();  // Operation for changes acknowledged by the server.
   // Map from event names to array of {func: function(event), options}.
   this.listeners = {};
+  this.undoStack = [];
+  this.redoStack = [];
 
   this.on('change', function(event) { self.updateData(event); });
   this.on('localChange', function(event) { self.updateData(event); });
@@ -844,19 +852,15 @@ Client.prototype = {
   // path: list of keys (string or integer) to the object that receive the
   //   operation.
   act: function(action) {
-    var aops = this.commitAction(action);
-    // TODO: localUpdate event.
-    this.emitChanges('localChange', aops);
-    this.sendToServer();
+    this.registerAtomicOperations(this.commitAction(action));
   },
   // actions: list of [actionType, path, …params].
-  actAtomically: function(actions) {
+  actAtomically: function(actions, options) {
     var aops = [];
     for (var i = 0; i < actions.length; i++) {
       aops = aops.concat(this.commitAction(actions[i]));
     }
-    this.emitChanges('localChange', aops);
-    this.sendToServer();
+    this.registerAtomicOperations(aops, options);
   },
   // action: [actions.*, path, …params]
   // Return a list of AtomicOperations.
@@ -875,6 +879,11 @@ Client.prototype = {
     }
     return aops;
   },
+  // actionType: actions.*
+  applyAtomicOperation: function(actionType, key, value) {
+    return this.local.applyAtomicOperation(
+      actionType, key, value, this.base, this.id);
+  },
   // action: [actions.stringAdd, path, …params]
   // Return an AtomicOperation.
   stringAdd: function(action) {
@@ -892,6 +901,45 @@ Client.prototype = {
   set: function(action) {
     return this.local.set(action[1], action[2], action[3],
         this.base, this.localId);
+  },
+
+  // History management
+
+  registerAtomicOperations: function(aops, options) {
+    options = options || {};
+    if (!options.skipHistory) {
+      // Add to the local history.
+      this.undoStack.push(new Operation(aops));
+    }
+    // TODO: localUpdate event.
+    this.emitChanges('localChange', aops);
+    this.sendToServer();
+  },
+
+  undo: function() {
+    var lastOp = this.undoStack.pop();
+    if (lastOp !== undefined) {
+      this.redoStack.push(lastOp.dup());
+      var op = lastOp.inverse();
+      var aops = [];
+      for (var i = 0; i < op.list.length; i++) {
+        var aop = op.list[i];
+        aops.push(this.applyAtomicOperation(aop.action, aop.key, aop.value));
+      }
+      this.registerAtomicOperations(aops, {skipHistory: true});
+    }
+  },
+
+  redo: function() {
+    var op = this.redoStack.pop();
+    if (op !== undefined) {
+      var aops = [];
+      for (var i = 0; i < op.list.length; i++) {
+        var aop = op.list[i];
+        aops.push(this.applyAtomicOperation(aop.action, aop.key, aop.value));
+      }
+      this.registerAtomicOperations(aops, {skipHistory: true});
+    }
   },
 
   // Send a signal to all other nodes of the network.
