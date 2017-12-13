@@ -678,10 +678,11 @@ Client.prototype = {
   // changes: list of AtomicOperation.
   // posChanges: list of PosChange.
   emitChanges: function(eventName, changes, posChanges) {
-    var change = changes.map(function(change) {
-      return [[], change.action, change.key, change.value];
-    });
+    var change = changes.map(this.aopArrayFromAop);
     this.emit(eventName, {changes: change, posChanges: posChanges});
+  },
+  aopArrayFromAop: function(change) {
+    return [[], change.action, change.key, change.value];
   },
   // Receive an external update conforming to the protocol, as a String.
   // Emit the corresponding change, update and synced events.
@@ -918,28 +919,30 @@ Client.prototype = {
 
   undo: function() {
     var lastOp = this.undoStack.pop();
+    var aops = [];
     if (lastOp !== undefined) {
       this.redoStack.push(lastOp.dup());
       var op = lastOp.inverse();
-      var aops = [];
       for (var i = 0; i < op.list.length; i++) {
         var aop = op.list[i];
         aops.push(this.applyAtomicOperation(aop.action, aop.key, aop.value));
       }
       this.registerAtomicOperations(aops, {skipHistory: true});
     }
+    return aops.map(this.aopArrayFromAop);
   },
 
   redo: function() {
     var op = this.redoStack.pop();
+    var aops = [];
     if (op !== undefined) {
-      var aops = [];
       for (var i = 0; i < op.list.length; i++) {
         var aop = op.list[i];
         aops.push(this.applyAtomicOperation(aop.action, aop.key, aop.value));
       }
       this.registerAtomicOperations(aops, {skipHistory: true});
     }
+    return aops.map(this.aopArrayFromAop);
   },
 
   // Send a signal to all other nodes of the network.
