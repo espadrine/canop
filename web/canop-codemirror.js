@@ -26,6 +26,7 @@ CanopCodemirror.prototype = {
     this.updateEditor(event.changes, event.posChanges);
   },
 
+  // Listen to UI changes and register them in canop.
   editorChange: function canopCodemirrorEditorChange(editor, changes) {
     // The codemirror positions in `changes` correspond to before the change's
     // execution. However, the `editor` has the changes applied, so that
@@ -106,25 +107,32 @@ CanopCodemirror.prototype = {
     self.canopClient.signal({sel: selections});
   },
 
-  resetEditor: function canopCodemirrorResetEditor() {
+  // action: function
+  withoutEditorListeners: function(action) {
     this.editor.off('changes', this.editorChange);
     this.editor.off('cursorActivity', this.cursorActivity);
-    var cursor = this.editor.getCursor();
-    this.editor.setValue('' + this.canopClient);
-    this.editor.setCursor(cursor);
+    action();
     this.editor.on('cursorActivity', this.cursorActivity);
     this.editor.on('changes', this.editorChange);
   },
 
+  resetEditor: function canopCodemirrorResetEditor() {
+    var self = this;
+    self.withoutEditorListeners(function() {
+      var cursor = self.editor.getCursor();
+      self.editor.setValue('' + self.canopClient);
+      self.editor.setCursor(cursor);
+    });
+  },
+
   // Takes a list of AtomicOperations and a list of PosChanges.
   updateEditor: function canopCodemirrorUpdateEditor(delta, posChanges) {
-    this.editor.off('changes', this.editorChange);
-    this.editor.off('cursorActivity', this.cursorActivity);
-    var selections = this.getSelections();
-    this.applyDelta(delta);
-    this.setSelections(posChanges, selections);
-    this.editor.on('cursorActivity', this.cursorActivity);
-    this.editor.on('changes', this.editorChange);
+    var self = this;
+    self.withoutEditorListeners(function() {
+      var selections = self.getSelections();
+      self.applyDelta(delta);
+      self.setSelections(posChanges, selections);
+    });
   },
 
   applyDelta: function canopCodemirrorApplyDelta(delta) {
