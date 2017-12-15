@@ -15,10 +15,15 @@ function CanopCodemirror(client, editor) {
   this.remoteChange = this.remoteChange.bind(this);
   this.cursorActivity = this.cursorActivity.bind(this);
   this.signalReceive = this.signalReceive.bind(this);
+  this.editorUndo = this.editorUndo.bind(this);
+  this.editorRedo = this.editorRedo.bind(this);
 
   this.canopClient.on('change', this.remoteChange);
   this.canopClient.on('signal', this.signalReceive);
   this.clientSelectionWidgets = Object.create(null);
+
+  this.editor.undo = this.editorUndo;
+  this.editor.redo = this.editorRedo;
 }
 
 CanopCodemirror.prototype = {
@@ -152,6 +157,19 @@ CanopCodemirror.prototype = {
           self.editor.replaceRange('', from, to, '*');
         }
       }
+    });
+  },
+
+  editorUndo: function() {
+    var self = this;
+    self.withoutEditorListeners(function() {
+      self.applyDelta(self.canopClient.undo());
+    });
+  },
+  editorRedo: function() {
+    var self = this;
+    self.withoutEditorListeners(function() {
+      self.applyDelta(self.canopClient.redo());
     });
   },
 
