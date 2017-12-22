@@ -6,6 +6,9 @@
   "scripts": {
     "test": "node test/canop.js"
   },
+  "devDependencies": {
+    "camp": "~17.2.1"
+  },
   "repository": {
     "type": "git",
     "url": "git@github.com:espadrine/canop.git"
