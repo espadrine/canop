@@ -911,6 +911,7 @@ Client.prototype = {
     if (!options.skipHistory) {
       // Add to the local history.
       this.undoStack.push(new Operation(aops));
+      this.redoStack = [];
     }
     // TODO: localUpdate event.
     this.emitChanges('localChange', aops);
