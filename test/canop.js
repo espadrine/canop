@@ -169,3 +169,16 @@ sendChange(star, 0);
 sendChange(star, 1);
 assert.equal(String(star.server), 'abcd', 'Server redo');
 assert.equal(String(star.clients[1]), 'abcd', 'Client 1 redo');
+
+// Partial undo, edition, and redo
+var star = new Star('');
+star.clients[0].add([], 0, 'a');
+star.clients[0].add([], 1, 'b');
+star.clients[0].undo();
+star.clients[0].add([], 1, 'c');
+star.clients[0].redo();
+sendChange(star, 0);
+sendChange(star, 1);
+assert.equal(String(star.server), 'ac', 'Server undo, edition, redo');
+assert.equal(String(star.clients[0]), 'ac', 'Client 0 undo, edition, redo');
+assert.equal(String(star.clients[1]), 'ac', 'Client 1 undo, edition, redo');
