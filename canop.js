@@ -937,6 +937,7 @@ Client.prototype = {
     var op = this.redoStack.pop();
     var aops = [];
     if (op !== undefined) {
+      this.undoStack.push(op.dup());
       for (var i = 0; i < op.list.length; i++) {
         var aop = op.list[i];
         aops.push(this.applyAtomicOperation(aop.action, aop.key, aop.value));
