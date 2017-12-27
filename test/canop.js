@@ -182,3 +182,15 @@ sendChange(star, 1);
 assert.equal(String(star.server), 'ac', 'Server undo, edition, redo');
 assert.equal(String(star.clients[0]), 'ac', 'Client 0 undo, edition, redo');
 assert.equal(String(star.clients[1]), 'ac', 'Client 1 undo, edition, redo');
+
+// undo, redo, undo
+var star = new Star('');
+star.clients[0].add([], 0, 'a');
+star.clients[0].undo();
+star.clients[0].redo();
+star.clients[0].undo();
+sendChange(star, 0);
+sendChange(star, 1);
+assert.equal(String(star.server), '', 'Server undo, redo, undo');
+assert.equal(String(star.clients[0]), '', 'Client 0 undo, redo, undo');
+assert.equal(String(star.clients[1]), '', 'Client 1 undo, redo, undo');
