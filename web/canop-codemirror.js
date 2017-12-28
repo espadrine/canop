@@ -21,6 +21,8 @@ function CanopCodemirror(client, editor) {
   this.canopClient.on('change', this.remoteChange);
   this.canopClient.on('signal', this.signalReceive);
   this.clientSelectionWidgets = Object.create(null);
+  this.actionBuffer = [];
+  this.actionBufferTimeout = null;
 
   this.editor.undo = this.editorUndo;
   this.editor.redo = this.editorRedo;
@@ -33,6 +35,7 @@ CanopCodemirror.prototype = {
 
   // Listen to UI changes and register them in canop.
   editorChange: function canopCodemirrorEditorChange(editor, change) {
+    var self = this;
     var actions = [];
     var from = change.from;
     var to = change.to;
@@ -45,7 +48,17 @@ CanopCodemirror.prototype = {
     if (added.length > 0) {
       actions.push([canop.action.stringAdd, [], fromIdx, added]);
     }
-    this.canopClient.actAtomically(actions);
+
+    var commit = function() {
+      self.canopClient.actAtomically(self.actionBuffer);
+      self.actionBuffer = [];
+      self.actionBufferTimeout = null;
+    };
+
+    self.actionBuffer = self.actionBuffer.concat(actions);
+    if (self.actionBufferTimeout === null) {
+      self.actionBufferTimeout = setTimeout(commit, 100);
+    }
   },
 
   cursorActivity: function canopCodemirrorCursorActivity(editor) {
