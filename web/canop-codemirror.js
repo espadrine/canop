@@ -17,12 +17,14 @@ function CanopCodemirror(client, editor) {
   this.signalReceive = this.signalReceive.bind(this);
   this.editorUndo = this.editorUndo.bind(this);
   this.editorRedo = this.editorRedo.bind(this);
+  this.commit = this.commit.bind(this);
 
   this.canopClient.on('change', this.remoteChange);
   this.canopClient.on('signal', this.signalReceive);
   this.clientSelectionWidgets = Object.create(null);
   this.actionBuffer = [];
   this.actionBufferTimeout = null;
+  this.commitCallbacks = [];
 
   this.editor.undo = this.editorUndo;
   this.editor.redo = this.editorRedo;
@@ -30,12 +32,32 @@ function CanopCodemirror(client, editor) {
 
 CanopCodemirror.prototype = {
   remoteChange: function canopCodemirrorRemoteUpdate(event) {
-    this.updateEditor(event.changes, event.posChanges);
+    var self = this;
+    self.awaitCommit(function() {
+      self.updateEditor(event.changes, event.posChanges);
+    });
+  },
+
+  awaitCommit: function(cb) {
+    if (this.actionBufferTimeout === null) {
+      cb();
+    } else {
+      this.commitCallbacks.push(cb);
+    }
+  },
+
+  commit: function() {
+    this.canopClient.actAtomically(this.actionBuffer);
+    this.actionBuffer = [];
+    this.actionBufferTimeout = null;
+    for (var i = 0; i < this.commitCallbacks.length; i++) {
+      this.commitCallbacks[i]();
+    }
+    this.commitCallbacks = [];
   },
 
   // Listen to UI changes and register them in canop.
   editorChange: function canopCodemirrorEditorChange(editor, change) {
-    var self = this;
     var actions = [];
     var from = change.from;
     var to = change.to;
@@ -49,15 +71,9 @@ CanopCodemirror.prototype = {
       actions.push([canop.action.stringAdd, [], fromIdx, added]);
     }
 
-    var commit = function() {
-      self.canopClient.actAtomically(self.actionBuffer);
-      self.actionBuffer = [];
-      self.actionBufferTimeout = null;
-    };
-
-    self.actionBuffer = self.actionBuffer.concat(actions);
-    if (self.actionBufferTimeout === null) {
-      self.actionBufferTimeout = setTimeout(commit, 100);
+    this.actionBuffer = this.actionBuffer.concat(actions);
+    if (this.actionBufferTimeout === null) {
+      this.actionBufferTimeout = setTimeout(this.commit, 100);
     }
   },
 
