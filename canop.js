@@ -1027,6 +1027,8 @@ Client.prototype = {
         var data = protocol[2];
         if (data !== undefined) {
           for (var key in data) {
+            self.signalFromClient[clientId] = self.signalFromClient[clientId] ||
+              {};
             self.signalFromClient[clientId][key] = data[key];
           }
         }
