@@ -49,6 +49,9 @@ client.on('localChange', changeListener);
 client.on('update', function(updated) {}, {path: ['some']});
 client.on('localUpdate', function(updated) {}, {path: ['some']});
 client.removeListener('change', changeListener);
+// Returns an array of [path, action type, parameters…]
+client.undo()
+client.redo()
 
 // When all local operations are acknowledged by the server.
 client.on('synced', function() {});
