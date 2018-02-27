@@ -181,12 +181,12 @@ CanopCodemirror.prototype = {
     var data = event.data;
     this.clientSelectionWidgets[clientId] =
       this.clientSelectionWidgets[clientId] || [];
+    var signals = this.canopClient.signalFromClient[clientId];
 
     // Clear existing widgets.
     var widgets = this.clientSelectionWidgets[clientId];
     for (var i = 0; i < widgets.length; i++) {
-      var widget = widgets[i];
-      widget.clear();
+      widgets[i].clear();
     }
 
     // Set new widgets.
@@ -195,7 +195,7 @@ CanopCodemirror.prototype = {
       for (var i = 0; i < selections.length; i++) {
         var selection = selections[i];
         // TODO: use a signaled name instead of the clientId.
-        var widgets = this.addSelection(selection, clientId);
+        var widgets = this.addSelection(selection, signals.name || clientId);
         this.clientSelectionWidgets[clientId] =
           this.clientSelectionWidgets[clientId].concat(widgets);
       }

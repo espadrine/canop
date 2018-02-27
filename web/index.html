@@ -18,5 +18,8 @@ var canopui = canop.ui.codemirror(client, CodeMirror(document.body));
 client.on('synced', function() { console.log('synced'); });
 client.on('syncing', function() { console.log('syncing'); });
 client.on('unsyncable', function() { console.log('unsyncable'); });
+client.once('ready', function() {
+  client.signal({name: prompt("What is your name?")});
+});
 </script>
 </body>

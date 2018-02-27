@@ -636,11 +636,11 @@ Client.prototype = {
     var messageType = protocol[0];
     if (messageType === PROTOCOL_STATE) {
       this.reset(protocol[1], protocol[2], protocol[3]);
-      this.clientState = STATE_READY;
+      this.ready();
       this.sendToServer();
     } else if (messageType === PROTOCOL_DELTA_SINCE) {
       this.receiveChange(protocol);
-      this.clientState = STATE_READY;
+      this.ready();
       this.sendToServer();
     } else if (messageType === PROTOCOL_DELTA) {
       if (this.clientState !== STATE_READY) { return; }
@@ -672,6 +672,10 @@ Client.prototype = {
     } else {
       console.error("Unknown protocol message " + message);
     }
+  },
+  ready: function() {
+    this.clientState = STATE_READY;
+    this.emit('ready', {});
   },
   // Emit change / localChange events using their proper formats.
   // eventName: either 'change' or 'localChange'.
