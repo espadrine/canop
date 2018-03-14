@@ -227,6 +227,7 @@ CanopCodemirror.prototype = {
     domName.style.display = "none";
     domName.style.padding = "0 0.7em";
     domName.style.borderRadius = "3px";
+    domName.style.wordWrap = 'normal';
     domName.style.backgroundColor = color;
     domName.textContent = name;
     domCursor.appendChild(domName);
