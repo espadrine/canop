@@ -217,10 +217,14 @@ CanopCodemirror.prototype = {
     var coords = this.editor.cursorCoords(pos);
     var domCursor = document.createElement("span");
     var color = this.colorFromName(name.toString());
-    domCursor.style.backgroundColor = color;
-    domCursor.style.width = "2px";
-    domCursor.style.marginLeft = "-1px";
-    domCursor.style.position = "absolute";
+    //domCursor.style.backgroundColor = color;
+    //domCursor.style.width = "2px";
+    //domCursor.style.marginLeft = "-1px";
+    //domCursor.style.position = "absolute";
+    domCursor.style.display = 'inline-block';
+    domCursor.style.padding = '0';
+    domCursor.style.marginLeft = domCursor.style.marginRight = '-1px';
+    domCursor.style.borderLeft = '2px solid ' + color;
     domCursor.style.height = (coords.bottom - coords.top) + "px";
     // Show the name in a colorful rectangle above the cursor.
     var domName = document.createElement("span");
@@ -290,8 +294,9 @@ CanopCodemirror.prototype = {
     for (var i = 0; i < name.length; i++) {
       hue = (hue + name.charCodeAt(i)) % 360;
     }
-    // 93 is a prime number close to a quarter of 360.
-    return (hue * 93) % 360;
+    // We rely on Vogel’s method to ensure we walk through a large part of the
+    // hue spectrum with minimal repetition.
+    return (hue * 360 * (3 - Math.sqrt(5)) / 2) % 360;
   },
 
   // Return a CSS rgb(…) string for each string name, with the same luma, and
